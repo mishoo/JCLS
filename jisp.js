@@ -208,7 +208,7 @@ function ignore(stream) {
 };
 
 function ignore_comment(stream) {
-        read_while(function(ch){ return ch == "\n" });
+        stream.read_while(function(ch){ return ch == "\n" });
 };
 
 function read_delimited_list(stream, endchar) {
@@ -315,7 +315,11 @@ function read(stream, eof_error, eof_value) {
         var reader = SPECIAL_CHARS[ch];
         if (reader) {
                 stream.next();
-                return reader(stream);
+                while (true) {
+                        var ret = reader(stream);
+                        if (ret == null) ret = read(stream, eof_error, eof_value);
+                        if (ret != null) return ret;
+                }
         }
         return read_symbol(stream);
 };
@@ -349,7 +353,7 @@ function write_ast_to_string(node) {
 /* -----[ evaluator stuff ]----- */
 
 var NIL = CL.intern("NIL");
-CL.intern("T");
+var T = CL.intern("T");
 CL.intern("IF");
 CL.intern("LAMBDA");
 CL.intern("QUOTE");
@@ -359,7 +363,6 @@ CL.intern("EQ");
 CL.intern("CAR");
 CL.intern("CDR");
 
-function T() { return CL.find_symbol("T") };
 function nullp(arg) { return arg === NIL };
 function consp(arg) { return arg instanceof Pair || nullp(arg) };
 function symbolp(arg) { return arg instanceof Symbol };
@@ -431,7 +434,14 @@ var eval = (function(){
         return function eval(expr, env) {
                 //console.log(write_ast_to_string(expr));
                 if (env == null) env = new Scope();
-                if (symbolp(expr)) return env.get(expr);
+                if (symbolp(expr)) switch (expr) {
+                    case NIL:
+                        return NIL;
+                    case T:
+                        return T;
+                    default:
+                        return env.get(expr);
+                }
                 else if (numberp(expr) || stringp(expr)) return expr;
                 else if (atom(car(expr))) switch (car(expr)) {
                     case QUOTE:
@@ -450,7 +460,7 @@ var eval = (function(){
                         return eval_if(LST.cadr(expr), LST.caddr(expr), LST.cadddr(expr), env);
                     default:
                         var func = car(expr).get("FUNCTION");
-                        if (!func) throw "Undefined function: " + expr.full_name();
+                        if (!func) throw new Error("Undefined function: " + write_ast_to_string(car(expr)));
                         if (car(expr).get("COMPILED"))
                                 return func.apply(null, list_to_array(eval_list(cdr(expr), env)));
                         throw new Error("No support for this yet");
@@ -481,50 +491,25 @@ var eval = (function(){
         };
 }());
 
-// // console.log(
-// //         LST.cadr(
-// //                 cons(1, cons(2, cons(3, cons(4, NIL))))
-// //         )
-// // )
+exports.write_ast_to_string = write_ast_to_string;
+exports.read = read;
+exports.eval = eval;
+exports.make_string_stream = make_string_stream;
 
-// // return;
+/* -----[ Few utility functions ]----- */
 
-// console.log(
-//         write_ast_to_string(
-//                 eval(
-//                         read(
-//                                 make_string_stream(
-//                                         "((lambda (x) (cadr x) (cons (caddr x) (cadddr x))) '(1 2 3 4 5))"
-//                                         //"((lambda (x) (caddr x)) (cons 1 (cons 2 (cons 3 NIL))))"
-//                                         //"'(1 2 3 4 5)"
-//                                 )
-//                         )
-//                 )
-//         )
-// )
+CL.intern("+").set("COMPILED", true).set("FUNCTION", function(a, b){
+        return [].slice.call(arguments).reduce(function(a, b){ return a + b }, 0);
+});
 
-// // console.log(
-// //         write_ast_to_string(
-// //                 read(
-// //                         make_string_stream(
-// //                                 "'(1 2 3 4 5)"
-// //                                 //"(cons 1 (cons 2 (cons 3 nil)))"
-// //                         )
-// //                 )
-// //         )
-// // )
+CL.intern("-").set("COMPILED", true).set("FUNCTION", function(){
+        return [].slice.call(arguments, 1).reduce(function(a, b){ return a - b }, arguments[0]);
+});
 
+CL.intern("*").set("COMPILED", true).set("FUNCTION", function(){
+        return [].slice.call(arguments).reduce(function(a, b){ return a * b }, 1);
+});
 
-
-
-
-
-
-
-
-
-// // var sys = require("sys");
-// // var str = "(defun f\\(oo(a b c) (cl:format nil \"foo ~a ~a ~a\" \n\
-// // a b (+ c '0.5 0.3.4)))";
-// // console.log( sys.inspect( read(make_string_stream(str)), null, null ) );
-// // //console.log( read(make_string_stream(str)) );
+CL.intern("/").set("COMPILED", true).set("FUNCTION", function(){
+        return [].slice.call(arguments, 1).reduce(function(a, b){ return a / b }, arguments[0]);
+});
