@@ -1,5 +1,5 @@
-((lambda (x) (+ x 2))
- 10)
+((lambda (x y z) (+ x (* y z) 2))
+ 10 20 30)
 
 ((lambda (f)
    (funcall f f 5))

@@ -1,8 +1,6 @@
-var slice = Array.prototype.slice;
-
 function compose(a, rest) {
         if (rest == null) return a;
-        rest = compose.apply(null, slice.call(arguments, 1));
+        rest = compose.apply(null, [].slice.call(arguments, 1));
         return function() { return a(rest.apply(this, arguments)) };
 };
 
@@ -60,6 +58,5 @@ exports.amb = amb;
 exports.compose = compose;
 exports.defaults = defaults;
 exports.repeat_string = repeat_string;
-exports.slice = slice;
 exports.HOP = HOP;
 exports.range = range;

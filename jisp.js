@@ -388,7 +388,7 @@ var LST = {};
                         while (a.length < n + 1) a = "0" + a;
                         var name = "C" + a.replace(/0/g, "A").replace(/1/g, "D") + "R";
                         var func = fnctl.compose.apply(null, a.split("").map(function(ch){ return base[ch] }));
-                        CL.intern(name).set("FUNCTION", func).set("COMPILED", true);
+                        CL.intern(name).set("COMPILED", func);
                         LST[name.toLowerCase()] = func;
                 }
                 n++;
@@ -459,10 +459,11 @@ var eval = (function(){
                     case IF:
                         return eval_if(LST.cadr(expr), LST.caddr(expr), LST.cadddr(expr), env);
                     default:
-                        var func = car(expr).get("FUNCTION");
-                        if (!func) throw new Error("Undefined function: " + write_ast_to_string(car(expr)));
-                        if (car(expr).get("COMPILED"))
+                        var func = car(expr).get("COMPILED");
+                        if (func)
                                 return func.apply(null, list_to_array(eval_list(cdr(expr), env)));
+                        func = car(expr).get("FUNCTION");
+                        if (!func) throw new Error("Undefined function: " + write_ast_to_string(car(expr)));
                         throw new Error("No support for this yet");
                 }
                 else if (LST.caar(expr) === LAMBDA) {
@@ -498,18 +499,18 @@ exports.make_string_stream = make_string_stream;
 
 /* -----[ Few utility functions ]----- */
 
-CL.intern("+").set("COMPILED", true).set("FUNCTION", function(a, b){
+CL.intern("+").set("COMPILED", function(a, b){
         return [].slice.call(arguments).reduce(function(a, b){ return a + b }, 0);
 });
 
-CL.intern("-").set("COMPILED", true).set("FUNCTION", function(){
+CL.intern("-").set("COMPILED", function(){
         return [].slice.call(arguments, 1).reduce(function(a, b){ return a - b }, arguments[0]);
 });
 
-CL.intern("*").set("COMPILED", true).set("FUNCTION", function(){
+CL.intern("*").set("COMPILED", function(){
         return [].slice.call(arguments).reduce(function(a, b){ return a * b }, 1);
 });
 
-CL.intern("/").set("COMPILED", true).set("FUNCTION", function(){
+CL.intern("/").set("COMPILED", function(){
         return [].slice.call(arguments, 1).reduce(function(a, b){ return a / b }, arguments[0]);
 });
