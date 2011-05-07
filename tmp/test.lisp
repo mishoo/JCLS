@@ -1,6 +1,4 @@
-(let ((foo (lambda (a b c d)
-             (+ a b c d))))
-  (apply foo 1 2 '(3 4)))
+;; check
 
 (progn
   (let ((val 0))

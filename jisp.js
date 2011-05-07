@@ -237,7 +237,7 @@ function ignore(stream) {
 };
 
 function ignore_comment(stream) {
-        stream.read_while(function(ch){ return ch == "\n" });
+        stream.read_while(function(ch){ return ch != "\n" });
 };
 
 function read_delimited_list(stream, endchar) {
@@ -453,43 +453,42 @@ var LST = {};
                         var a = i.toString(2);
                         while (a.length < n + 1) a = "0" + a;
                         var name = "C" + a.replace(/0/g, "A").replace(/1/g, "D") + "R";
-                        //console.log("var " + name.toLowerCase() + " = LST." + name.toLowerCase() + ";");
                         var func = compose.apply(null, a.split("").map(function(ch){ return base[ch] }));
                         _GLOBAL_SCOPE_.set("funcs", CL.intern(name), func);
                         LST[name.toLowerCase()] = func;
                 }
                 n++;
         }
-})(1);
+})(0);
 
-var caar = LST.caar;
-var cadr = LST.cadr;
-var cdar = LST.cdar;
-var cddr = LST.cddr;
-var caaar = LST.caaar;
-var caadr = LST.caadr;
-var cadar = LST.cadar;
-var caddr = LST.caddr;
-var cdaar = LST.cdaar;
-var cdadr = LST.cdadr;
-var cddar = LST.cddar;
-var cdddr = LST.cdddr;
-var caaaar = LST.caaaar;
-var caaadr = LST.caaadr;
-var caadar = LST.caadar;
-var caaddr = LST.caaddr;
-var cadaar = LST.cadaar;
-var cadadr = LST.cadadr;
-var caddar = LST.caddar;
-var cadddr = LST.cadddr;
-var cdaaar = LST.cdaaar;
-var cdaadr = LST.cdaadr;
-var cdadar = LST.cdadar;
-var cdaddr = LST.cdaddr;
-var cddaar = LST.cddaar;
-var cddadr = LST.cddadr;
-var cdddar = LST.cdddar;
-var cddddr = LST.cddddr;
+var caar = LST.caar
+, cadr = LST.cadr
+, cdar = LST.cdar
+, cddr = LST.cddr
+, caaar = LST.caaar
+, caadr = LST.caadr
+, cadar = LST.cadar
+, caddr = LST.caddr
+, cdaar = LST.cdaar
+, cdadr = LST.cdadr
+, cddar = LST.cddar
+, cdddr = LST.cdddr
+, caaaar = LST.caaaar
+, caaadr = LST.caaadr
+, caadar = LST.caadar
+, caaddr = LST.caaddr
+, cadaar = LST.cadaar
+, cadadr = LST.cadadr
+, caddar = LST.caddar
+, cadddr = LST.cadddr
+, cdaaar = LST.cdaaar
+, cdaadr = LST.cdaadr
+, cdadar = LST.cdadar
+, cdaddr = LST.cdaddr
+, cddaar = LST.cddaar
+, cddadr = LST.cddadr
+, cdddar = LST.cdddar
+, cddddr = LST.cddddr;
 
 var eval = (function(){
         var QUOTE = CL.intern("QUOTE")
@@ -527,6 +526,10 @@ var eval = (function(){
                 return apply(func, list);
         });
 
+        CL.defun("ATOM", atom);
+        CL.defun("EQ", eq);
+        CL.defun("CONS", cons);
+
         return function eval(expr, env) {
                 if (env == null) env = _GLOBAL_SCOPE_;
                 if (symbolp(expr)) switch (expr) {
@@ -542,17 +545,6 @@ var eval = (function(){
                 else if (atom(car(expr))) switch (car(expr)) {
                     case QUOTE:
                         return cadr(expr);
-                    case ATOM:
-                        return atom(eval(cadr(expr), env));
-                    case EQ:
-                        return eq(eval(cadr(expr), env),
-                                  eval(caddr(expr), env));
-                    case CAR:
-                        return car(eval(cadr(expr), env));
-                    case CDR:
-                        return cdr(eval(cadr(expr), env));
-                    case CONS:
-                        return cons(eval(cadr(expr), env), eval(caddr(expr), env));
                     case IF:
                         return eval_if(cadr(expr), caddr(expr), cadddr(expr), env);
                     case LAMBDA:
