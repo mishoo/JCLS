@@ -44,6 +44,30 @@ function array_to_list(a) {
         return cons(a[0], array_to_list([].slice.call(a, 1)));
 };
 
+// too bad we can't afford to use recursion for some list manipulation
+// functions. :-\  without TCO we wouldn't get far.
+
+function eachlist(list, func) {
+        while (!nullp(list)) {
+                func(car(list));
+                list = cdr(list);
+        }
+        return NIL;
+};
+
+function maplist(list, func) {
+        var ret = NIL, p = NIL;
+        while (!nullp(list)) {
+                var val = func(car(list));
+                list = cdr(list);
+                var tmp = cons(val, NIL);
+                if (!nullp(p)) set_cdr(p, tmp);
+                else ret = tmp;
+                p = tmp;
+        }
+        return ret;
+};
+
 /* -----[ Symbols and packages ]----- */
 
 var _PACKAGE_;
@@ -490,6 +514,145 @@ var caar = LST.caar
 , cdddar = LST.cdddar
 , cddddr = LST.cddddr;
 
+var analyze = (function(){
+        var QUOTE = CL.intern("QUOTE")
+        , ATOM    = CL.intern("ATOM")
+        , EQ      = CL.intern("EQ")
+        , CAR     = CL.intern("CAR")
+        , CDR     = CL.intern("CDR")
+        , CONS    = CL.intern("CONS")
+        , IF      = CL.intern("IF")
+        , LET     = CL.intern("LET")
+        , LET_    = CL.intern("LET*")
+        , FLET    = CL.intern("FLET")
+        , LABELS  = CL.intern("LABELS")
+        , SETQ    = CL.intern("SETQ")
+        , DEFUN   = CL.intern("DEFUN")
+        , PROGN   = CL.intern("PROGN")
+        , LAMBDA  = CL.intern("LAMBDA");
+
+        CL.defun("FUNCALL", function(){
+                var list = array_to_list(arguments);
+                var func = car(list), args = cdr(list);
+                return apply(func, args);
+        });
+
+        CL.defun("APPLY", function(func) {
+                var list = NIL, tmp = NIL;
+                for (var i = 1; i < arguments.length - 1; ++i) {
+                        var cell = cons(arguments[i], NIL);
+                        if (!nullp(tmp)) set_cdr(tmp, cell);
+                        if (nullp(list)) list = cell;
+                        tmp = cell;
+                }
+                if (tmp) set_cdr(tmp, arguments[arguments.length - 1]);
+                else list = arguments[arguments.length - 1];
+                return apply(func, list);
+        });
+
+        CL.defun("ATOM", atom);
+        CL.defun("EQ", eq);
+        CL.defun("CONS", cons);
+
+        return function analyze(expr) {
+                if (symbolp(expr)) switch (expr) {
+                    case NIL:
+                    case T:
+                        return itself(expr);
+                    default:
+                        if (expr._package === KEYWORD) return itself(expr);
+                        else return get_var(expr);
+                }
+                else if (numberp(expr) || stringp(expr)) return itself(expr);
+                else if (atom(car(expr))) switch (car(expr)) {
+                    case QUOTE:
+                        return itself(cadr(expr));
+                    case IF:
+                        return do_if(cadr(expr), caddr(expr), cadddr(expr));
+                    case LAMBDA:
+                        return do_lambda(cadr(expr), cddr(expr));
+                    case PROGN:
+                        return do_sequence(cdr(expr));
+                    default:
+                        return do_application(car(expr), cdr(expr));
+                }
+                else if (caar(expr) === LAMBDA) {
+                        return do_inline_call(cadar(expr), cddar(expr), cdr(expr));
+                }
+        };
+
+        function itself(el) {
+                return function(){ return el }
+        };
+
+        function get_var(symbol) {
+                return function(env) {
+                        return env.get("vars", symbol);
+                }
+        };
+
+        function do_if(condition, consequent, alternative) {
+                condition = analyze(condition);
+                consequent = analyze(consequent);
+                alternative = analyze(alternative);
+                return function(env) {
+                        return nullp(condition(env))
+                                ? alternative(env)
+                                : consequent(env);
+                };
+        };
+
+        function do_lambda(args, body) {
+                body = do_sequence(body);
+                return function(env) {
+                        return [ args, body, env ];
+                };
+        };
+
+        function do_sequence(list) {
+                list = maplist(list, analyze);
+                return function(env) {
+                        var val = NIL;
+                        eachlist(list, function(proc){ val = proc(env) });
+                        return val;
+                };
+        };
+
+        function do_application(operator, args) {
+                //operator = analyze(operator);
+                args = maplist(args, analyze);
+                return function(env) {
+                        var func = env.get("funcs", operator);
+                        if (!func)
+                                throw new Error("Undefined function: " + write_ast_to_string(operator));
+                        return apply(func, maplist(args, function(proc){
+                                return proc(env);
+                        }));
+                };
+        };
+
+        function do_inline_call(args, body, values) {
+                values = maplist(values, analyze);
+                body = do_sequence(body);
+                return function(env) {
+                        return apply([ args, body, env ], maplist(values, function(proc){
+                                return proc(env);
+                        }));
+                };
+        };
+
+        function apply(func, values) {
+                if (func instanceof Function) {
+                        return func.apply(null, list_to_array(values));
+                }
+                else if (func instanceof Array) {
+                        var names = func[0], body = func[1], env = func[2];
+                        return body(env.fork("vars", names, values));
+                }
+        };
+
+}());
+
 var eval = (function(){
         var QUOTE = CL.intern("QUOTE")
         , ATOM    = CL.intern("ATOM")
@@ -534,9 +697,8 @@ var eval = (function(){
                 if (env == null) env = _GLOBAL_SCOPE_;
                 if (symbolp(expr)) switch (expr) {
                     case NIL:
-                        return NIL;
                     case T:
-                        return T;
+                        return expr;
                     default:
                         if (expr._package === KEYWORD) return expr;
                         else return env.get("vars", expr);
@@ -656,12 +818,16 @@ var eval = (function(){
                         return eval_sequence(body, env.fork("vars", names, values));
                 }
         };
-}());
+});
 
 exports.write_ast_to_string = write_ast_to_string;
 exports.read = read;
 exports.eval = eval;
 exports.make_string_stream = make_string_stream;
+exports.analyze = analyze;
+exports.eval2 = function(ast, env) {
+        return analyze(ast)(env || _GLOBAL_SCOPE_);
+};
 
 /* -----[ Arithmetic ]----- */
 

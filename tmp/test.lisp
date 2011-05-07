@@ -1,10 +1,7 @@
 ;; check
 
-(progn
-  (let ((val 0))
-    (defun counter ()
-      (setq val (+ val 1))))
-
-  (io:log (counter))
-  (io:log (counter))
-  (io:log (counter)))
+((lambda (f)
+   (funcall f f 10))
+ (lambda (f n)
+   (if (= n 1) 1
+       (* n (funcall f f (- n 1))))))
