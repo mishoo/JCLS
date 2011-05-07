@@ -1,8 +1,8 @@
-(let ((count (let ((val 0))
-               (lambda ()
-                 (setq val (+ val 1))))))
-  (funcall count)
-  (funcall count)
-  (funcall count)
-  (funcall count)
-  (funcall count))
+(progn
+  (let ((val 0))
+    (defun counter ()
+      (setq val (+ val 1))))
+
+  (io:log (counter))
+  (io:log (counter))
+  (io:log (counter)))

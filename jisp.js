@@ -123,6 +123,9 @@ Package.prototype = {
         },
         use_package: function(name) {
                 pushnew(this._use_list, Package.get(name));
+        },
+        defun: function(name, func) {
+                _GLOBAL_SCOPE_.defun(this.intern(name), func);
         }
 };
 
@@ -501,15 +504,17 @@ var eval = (function(){
         , FLET    = CL.intern("FLET")
         , LABELS  = CL.intern("LABELS")
         , SETQ    = CL.intern("SETQ")
+        , DEFUN   = CL.intern("DEFUN")
+        , PROGN   = CL.intern("PROGN")
         , LAMBDA  = CL.intern("LAMBDA");
 
-        _GLOBAL_SCOPE_.defun(CL.intern("FUNCALL"), function() {
+        CL.defun("FUNCALL", function() {
                 var list = array_to_list(arguments);
                 var func = car(list), args = cdr(list);
                 return apply(func, args);
         });
 
-        _GLOBAL_SCOPE_.defun(CL.intern("APPLY"), function(func) {
+        CL.defun("APPLY", function(func) {
                 var list = NIL, tmp = NIL;
                 for (var i = 1; i < arguments.length - 1; ++i) {
                         var cell = cons(i, NIL);
@@ -609,6 +614,12 @@ var eval = (function(){
                                 }
                                 return val;
                         })(cdr(expr));
+                    case PROGN:
+                        return eval_sequence(cdr(expr), env);
+                    case DEFUN:
+                        return (function(name, args, body){
+                                return _GLOBAL_SCOPE_.set("funcs", name, make_lambda(args, body, env));
+                        })(cadr(expr), caddr(expr), cdddr(expr));
                     default:
                         var func = env.get("funcs", car(expr));
                         if (!func)
@@ -661,18 +672,26 @@ exports.make_string_stream = make_string_stream;
 
 /* -----[ Arithmetic ]----- */
 
-_GLOBAL_SCOPE_.defun(CL.intern("+"), function(a, b){
+CL.defun("+", function(a, b){
         return [].slice.call(arguments).reduce(function(a, b){ return a + b }, 0);
 });
 
-_GLOBAL_SCOPE_.defun(CL.intern("-"), function(){
+CL.defun("-", function(){
         return [].slice.call(arguments, 1).reduce(function(a, b){ return a - b }, arguments[0]);
 });
 
-_GLOBAL_SCOPE_.defun(CL.intern("*"), function(){
+CL.defun("*", function(){
         return [].slice.call(arguments).reduce(function(a, b){ return a * b }, 1);
 });
 
-_GLOBAL_SCOPE_.defun(CL.intern("/"), function(){
+CL.defun("/", function(){
         return [].slice.call(arguments, 1).reduce(function(a, b){ return a / b }, arguments[0]);
 });
+
+/* -----[ temporary I/O ]----- */
+
+(function(IO){
+        IO.defun("LOG", function(){
+                console.log([].slice.call(arguments).join(", "));
+        });
+})(new Package("IO"));
