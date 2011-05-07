@@ -194,7 +194,7 @@ function make_string_stream($SOURCE) {
                 var prev_commas = commas;
                 commas = 0;
                 ++backquote;
-                try { return cont() }
+                try { return cont(); }
                 finally { --backquote; commas = prev_commas; }
         };
         return {
@@ -625,7 +625,7 @@ var analyze = (function(){
                 };
         });
 
-        return function analyze(expr) {
+        function analyze(expr) {
                 var tmp;
                 if (symbolp(expr)) switch (expr) {
                     case NIL:
@@ -646,6 +646,8 @@ var analyze = (function(){
                         return do_inline_call(cadar(expr), cddar(expr), cdr(expr));
                 }
         };
+
+        return analyze;
 
         function itself(el) {
                 return function(){ return el };

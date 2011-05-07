@@ -1,6 +1,11 @@
 ;; foo
 ;; bar
 
+(labels ((fact (n)
+           (if (= n 1) 1
+               (* n (fact (- n 1))))))
+  (fact 10))
+
 (let ((x 10))
   (let* ((y x)
          (x (+ x x))
