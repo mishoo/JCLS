@@ -1,10 +1,12 @@
-;; check
+;; foo
+;; bar
 
 (let ((x 10))
   (let* ((y x)
          (x (+ x x))
          (z (* x 5)))
     (io:log (+ x y z)))
+  ;;foo
   x)
 
 (progn

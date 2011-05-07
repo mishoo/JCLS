@@ -369,6 +369,7 @@ function read_keyword(stream) {
 
 function read(stream, eof_error, eof_value) {
         if (arguments.length == 1) eof_error = true;
+        stream.skip_ws();
         var ch = stream.peek();
         if (!ch) {
                 if (eof_error) stream.error("end of input");
@@ -377,13 +378,9 @@ function read(stream, eof_error, eof_value) {
         var reader = _READTABLE_[ch];
         if (reader) {
                 stream.next();
-                while (true) {
-                        var ret = reader(stream, ch);
-                        if (ret == null) ret = read(stream, eof_error, eof_value);
-                        if (ret != null) return ret;
-                }
+                return reader(stream, ch) || read(stream, eof_error, eof_value);
         }
-        return read_symbol(stream);
+        else return read_symbol(stream);
 };
 
 /* -----[ print ast ]----- */
