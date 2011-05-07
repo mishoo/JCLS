@@ -1,5 +1,12 @@
 ;; check
 
+(let ((x 10))
+  (let* ((y x)
+         (x (+ x x))
+         (z (* x 5)))
+    (+ x y z))
+  x)
+
 (progn
   (let ((tmp 0))
     (defun count ()

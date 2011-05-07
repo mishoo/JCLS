@@ -555,7 +555,7 @@ var analyze = (function(){
                         env = new Scope(env);
                         var val = values.map(function(proc){ return proc(env) });
                         for (var i = 0; i < names.length; ++i) {
-                                env.set("vars", names[i], val[i]);
+                                env.force("vars", names[i], val[i]);
                         }
                         return body(env);
                 };
@@ -570,7 +570,7 @@ var analyze = (function(){
                 return function(env) {
                         env = new Scope(env);
                         for (var i = 0; i < names.length; ++i) {
-                                env.set("vars", names[i], values[i](env));
+                                env.force("vars", names[i], values[i](env));
                         }
                         return body(env);
                 };
@@ -587,7 +587,7 @@ var analyze = (function(){
                         env = new Scope(env);
                         var val = values.map(function(proc){ return proc(env) });
                         for (var i = 0; i < names.length; ++i) {
-                                env.set("funcs", names[i], val[i]);
+                                env.force("funcs", names[i], val[i]);
                         }
                         return body(env);
                 };
@@ -602,7 +602,7 @@ var analyze = (function(){
                 return function(env) {
                         env = new Scope(env);
                         for (var i = 0; i < names.length; ++i) {
-                                env.set("funcs", names[i], values[i](env));
+                                env.force("funcs", names[i], values[i](env));
                         }
                         return body(env);
                 };
@@ -623,7 +623,7 @@ var analyze = (function(){
         CL.special("DEFUN", function(ast){
                 var name = car(ast), func = do_lambda(cadr(ast), cddr(ast));
                 return function(env) {
-                        return _GLOBAL_SCOPE_.set("funcs", name, func(env));
+                        return _GLOBAL_SCOPE_.force("funcs", name, func(env));
                 };
         });
 
@@ -650,13 +650,13 @@ var analyze = (function(){
         };
 
         function itself(el) {
-                return function(){ return el }
+                return function(){ return el };
         };
 
         function get_var(symbol) {
                 return function(env) {
                         return env.get("vars", symbol);
-                }
+                };
         };
 
         function do_if(condition, consequent, alternative) {
