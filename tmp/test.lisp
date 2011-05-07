@@ -4,7 +4,7 @@
   (let* ((y x)
          (x (+ x x))
          (z (* x 5)))
-    (+ x y z))
+    (io:log (+ x y z)))
   x)
 
 (progn
@@ -22,7 +22,7 @@
   (sqr 8))
 
 (labels ((fact (n)
-           (if (eq n 1) 1
+           (if (= n 1) 1
                (* n (fact (- n 1))))))
   (fact 10))
 
