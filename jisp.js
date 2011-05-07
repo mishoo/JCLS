@@ -689,6 +689,44 @@ CL.defun("/", function(){
         return [].slice.call(arguments, 1).reduce(function(a, b){ return a / b }, arguments[0]);
 });
 
+CL.defun("=", function(val){
+        for (var i = 1; i < arguments.length; ++i)
+                if (arguments[i] !== val) return NIL;
+        return T;
+});
+
+CL.defun("<", function(last){
+        for (var i = 1; i < arguments.length; ++i) {
+                if (arguments[i] <= last) return NIL;
+                last = arguments[i];
+        }
+        return T;
+});
+
+CL.defun("<=", function(last){
+        for (var i = 1; i < arguments.length; ++i) {
+                if (arguments[i] < last) return NIL;
+                last = arguments[i];
+        }
+        return T;
+});
+
+CL.defun(">", function(last){
+        for (var i = 1; i < arguments.length; ++i) {
+                if (arguments[i] >= last) return NIL;
+                last = arguments[i];
+        }
+        return T;
+});
+
+CL.defun(">=", function(last){
+        for (var i = 1; i < arguments.length; ++i) {
+                if (arguments[i] > last) return NIL;
+                last = arguments[i];
+        }
+        return T;
+});
+
 /* -----[ temporary I/O ]----- */
 
 (function(IO){
