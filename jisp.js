@@ -378,7 +378,8 @@ function read(stream, eof_error, eof_value) {
         var reader = _READTABLE_[ch];
         if (reader) {
                 stream.next();
-                return reader(stream, ch) || read(stream, eof_error, eof_value);
+                var ret = reader(stream, ch);
+                return ret != null ? ret : read(stream, eof_error, eof_value);
         }
         else return read_symbol(stream);
 };
