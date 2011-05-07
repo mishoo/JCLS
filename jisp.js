@@ -106,7 +106,7 @@ Symbol.prototype = {
                 return this;
         },
         get: function(name) {
-                return this._plist[name];
+                return HOP(this._plist, name) ? this._plist[name] : NIL;
         }
 };
 
@@ -149,7 +149,10 @@ Package.prototype = {
                 pushnew(this._use_list, Package.get(name));
         },
         defun: function(name, func) {
-                _GLOBAL_SCOPE_.defun(this.intern(name), func);
+                return _GLOBAL_SCOPE_.defun(this.intern(name), func);
+        },
+        special: function(name, func) {
+                return this.intern(name).set("&SPECIAL", func);
         }
 };
 
@@ -446,24 +449,21 @@ Scope.prototype = {
         },
         set: function(ns, name, value) {
                 if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol");
-                this.ns(ns)[name] = value;
+                var tmp = this.ns(ns);
+                if (HOP(tmp, name)) return tmp[name] = value;
+                else if (this.parent) this.parent.set(ns, name, value);
+                //else throw new Error("Undeclared variable " + name); //;; WTF?
+                else return tmp[name] = value;
+        },
+        force: function(ns, name, value) {
+                if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol");
+                return this.ns(ns)[name] = value;
         },
         defun: function(name, value) {
-                return this.set("funcs", name, value);
+                return this.force("funcs", name, value);
         },
-        extend: function(ns, names, values) {
-                while (names !== NIL) {
-                        var name = car(names);
-                        this.set(ns, name, car(values));
-                        names = cdr(names);
-                        values = cdr(values);
-                }
-                return this;
-        },
-        fork: function(ns, names, values) {
-                if (nullp(names)) return this;
-                var s = new Scope(this);
-                return s.extend(ns, names, values);
+        fork: function() {
+                return new Scope(this);
         }
 };
 
@@ -478,7 +478,7 @@ var LST = {};
                         while (a.length < n + 1) a = "0" + a;
                         var name = "C" + a.replace(/0/g, "A").replace(/1/g, "D") + "R";
                         var func = compose.apply(null, a.split("").map(function(ch){ return base[ch] }));
-                        _GLOBAL_SCOPE_.set("funcs", CL.intern(name), func);
+                        CL.defun(name, func);
                         LST[name.toLowerCase()] = func;
                 }
                 n++;
@@ -515,21 +515,7 @@ var caar = LST.caar
 , cddddr = LST.cddddr;
 
 var analyze = (function(){
-        var QUOTE = CL.intern("QUOTE")
-        , ATOM    = CL.intern("ATOM")
-        , EQ      = CL.intern("EQ")
-        , CAR     = CL.intern("CAR")
-        , CDR     = CL.intern("CDR")
-        , CONS    = CL.intern("CONS")
-        , IF      = CL.intern("IF")
-        , LET     = CL.intern("LET")
-        , LET_    = CL.intern("LET*")
-        , FLET    = CL.intern("FLET")
-        , LABELS  = CL.intern("LABELS")
-        , SETQ    = CL.intern("SETQ")
-        , DEFUN   = CL.intern("DEFUN")
-        , PROGN   = CL.intern("PROGN")
-        , LAMBDA  = CL.intern("LAMBDA");
+        var LAMBDA  = CL.intern("LAMBDA");
 
         CL.defun("FUNCALL", function(){
                 var list = array_to_list(arguments);
@@ -554,7 +540,95 @@ var analyze = (function(){
         CL.defun("EQ", eq);
         CL.defun("CONS", cons);
 
+        CL.special("QUOTE", function(ast){ return itself(car(ast)) });
+        CL.special("IF", function(ast){ return do_if(car(ast), cadr(ast), caddr(ast)) });
+        CL.special("LAMBDA", function(ast){ return do_lambda(car(ast), cdr(ast)) });
+        CL.special("PROGN", function(ast){ return do_sequence(ast) });
+        CL.special("LET", function(ast){
+                var names = [], values = [];
+                eachlist(car(ast), function(def){
+                        names.push(car(def));
+                        values.push(analyze(cadr(def)));
+                });
+                var body = do_sequence(cdr(ast));
+                return function(env) {
+                        env = new Scope(env);
+                        var val = values.map(function(proc){ return proc(env) });
+                        for (var i = 0; i < names.length; ++i) {
+                                env.set("vars", names[i], val[i]);
+                        }
+                        return body(env);
+                };
+        });
+        CL.special("LET*", function(ast){
+                var names = [], values = [];
+                eachlist(car(ast), function(def){
+                        names.push(car(def));
+                        values.push(analyze(cadr(def)));
+                });
+                var body = do_sequence(cdr(ast));
+                return function(env) {
+                        env = new Scope(env);
+                        for (var i = 0; i < names.length; ++i) {
+                                env.set("vars", names[i], values[i](env));
+                        }
+                        return body(env);
+                };
+        });
+        // these are so similar to LET/FLET it's almost boring.
+        CL.special("FLET", function(ast){
+                var names = [], values = [];
+                eachlist(car(ast), function(def){
+                        names.push(car(def));
+                        values.push(do_lambda(cadr(def), cddr(def)));
+                });
+                var body = do_sequence(cdr(ast));
+                return function(env) {
+                        env = new Scope(env);
+                        var val = values.map(function(proc){ return proc(env) });
+                        for (var i = 0; i < names.length; ++i) {
+                                env.set("funcs", names[i], val[i]);
+                        }
+                        return body(env);
+                };
+        });
+        CL.special("LABELS", function(ast){
+                var names = [], values = [];
+                eachlist(car(ast), function(def){
+                        names.push(car(def));
+                        values.push(do_lambda(cadr(def), cddr(def)));
+                });
+                var body = do_sequence(cdr(ast));
+                return function(env) {
+                        env = new Scope(env);
+                        for (var i = 0; i < names.length; ++i) {
+                                env.set("funcs", names[i], values[i](env));
+                        }
+                        return body(env);
+                };
+        });
+        CL.special("SETQ", function(defs){
+                var names = [], values = [];
+                while (!nullp(defs)) {
+                        names.push(car(defs));
+                        values.push(analyze(cadr(defs)));
+                        defs = cddr(defs);
+                }
+                return function(env) {
+                        for (var ret = NIL, i = 0; i < names.length; ++i)
+                                env.set("vars", names[i], ret = values[i](env));
+                        return ret;
+                };
+        });
+        CL.special("DEFUN", function(ast){
+                var name = car(ast), func = do_lambda(cadr(ast), cddr(ast));
+                return function(env) {
+                        return _GLOBAL_SCOPE_.set("funcs", name, func(env));
+                };
+        });
+
         return function analyze(expr) {
+                var tmp;
                 if (symbolp(expr)) switch (expr) {
                     case NIL:
                     case T:
@@ -564,17 +638,11 @@ var analyze = (function(){
                         else return get_var(expr);
                 }
                 else if (numberp(expr) || stringp(expr)) return itself(expr);
-                else if (atom(car(expr))) switch (car(expr)) {
-                    case QUOTE:
-                        return itself(cadr(expr));
-                    case IF:
-                        return do_if(cadr(expr), caddr(expr), cadddr(expr));
-                    case LAMBDA:
-                        return do_lambda(cadr(expr), cddr(expr));
-                    case PROGN:
-                        return do_sequence(cdr(expr));
-                    default:
-                        return do_application(car(expr), cdr(expr));
+                else if (atom(tmp = car(expr))) {
+                        var spec;
+                        if (symbolp(tmp) && !nullp(spec = tmp.get("&SPECIAL")))
+                                return spec(cdr(expr));
+                        return do_application(tmp, cdr(expr));
                 }
                 else if (caar(expr) === LAMBDA) {
                         return do_inline_call(cadar(expr), cddar(expr), cdr(expr));
@@ -619,7 +687,6 @@ var analyze = (function(){
         };
 
         function do_application(operator, args) {
-                //operator = analyze(operator);
                 args = maplist(args, analyze);
                 return function(env) {
                         var func = env.get("funcs", operator);
@@ -647,187 +714,27 @@ var analyze = (function(){
                 }
                 else if (func instanceof Array) {
                         var names = func[0], body = func[1], env = func[2];
-                        return body(env.fork("vars", names, values));
+                        if (!nullp(names)) {
+                                env = env.fork();
+                                while (!nullp(names)) {
+                                        env.set("vars", car(names), car(values));
+                                        names = cdr(names);
+                                        values = cdr(values);
+                                }
+                        }
+                        return body(env);
                 }
         };
 
 }());
 
-var eval = (function(){
-        var QUOTE = CL.intern("QUOTE")
-        , ATOM    = CL.intern("ATOM")
-        , EQ      = CL.intern("EQ")
-        , CAR     = CL.intern("CAR")
-        , CDR     = CL.intern("CDR")
-        , CONS    = CL.intern("CONS")
-        , IF      = CL.intern("IF")
-        , LET     = CL.intern("LET")
-        , LET_    = CL.intern("LET*")
-        , FLET    = CL.intern("FLET")
-        , LABELS  = CL.intern("LABELS")
-        , SETQ    = CL.intern("SETQ")
-        , DEFUN   = CL.intern("DEFUN")
-        , PROGN   = CL.intern("PROGN")
-        , LAMBDA  = CL.intern("LAMBDA");
-
-        CL.defun("FUNCALL", function() {
-                var list = array_to_list(arguments);
-                var func = car(list), args = cdr(list);
-                return apply(func, args);
-        });
-
-        CL.defun("APPLY", function(func) {
-                var list = NIL, tmp = NIL;
-                for (var i = 1; i < arguments.length - 1; ++i) {
-                        var cell = cons(arguments[i], NIL);
-                        if (!nullp(tmp)) set_cdr(tmp, cell);
-                        if (nullp(list)) list = cell;
-                        tmp = cell;
-                }
-                if (tmp) set_cdr(tmp, arguments[arguments.length - 1]);
-                else list = arguments[arguments.length - 1];
-                return apply(func, list);
-        });
-
-        CL.defun("ATOM", atom);
-        CL.defun("EQ", eq);
-        CL.defun("CONS", cons);
-
-        return function eval(expr, env) {
-                if (env == null) env = _GLOBAL_SCOPE_;
-                if (symbolp(expr)) switch (expr) {
-                    case NIL:
-                    case T:
-                        return expr;
-                    default:
-                        if (expr._package === KEYWORD) return expr;
-                        else return env.get("vars", expr);
-                }
-                else if (numberp(expr) || stringp(expr)) return expr;
-                else if (atom(car(expr))) switch (car(expr)) {
-                    case QUOTE:
-                        return cadr(expr);
-                    case IF:
-                        return eval_if(cadr(expr), caddr(expr), cadddr(expr), env);
-                    case LAMBDA:
-                        return make_lambda(cadr(expr), cddr(expr), env);
-                    case LET:
-                        return eval_sequence(cddr(expr), (function(defs, env){
-                                var names = [], values = [];
-                                while (!nullp(defs)) {
-                                        var f = car(defs);
-                                        names.push(car(f));
-                                        values.push(eval(cadr(f), env));
-                                        defs = cdr(defs);
-                                }
-                                env = new Scope(env);
-                                for (var i = 0; i < names.length; ++i)
-                                        env.set("vars", names[i], values[i]);
-                                return env;
-                        })(cadr(expr), env));
-                    case LET_:
-                        return eval_sequence(cddr(expr), (function(defs, env){
-                                while (!nullp(defs)) {
-                                        var f = car(defs);
-                                        env = new Scope(env);
-                                        env.set("vars", car(f), eval(cadr(f), env));
-                                        defs = cdr(defs);
-                                }
-                                return env;
-                        })(cadr(expr), env));
-                    case FLET:
-                        return eval_sequence(cddr(expr), (function(defs, env){
-                                var names = [], values = [];
-                                while (!nullp(defs)) {
-                                        var f = car(defs);
-                                        names.push(car(f));
-                                        values.push(make_lambda(cadr(f), cddr(f), env));
-                                        defs = cdr(defs);
-                                }
-                                env = new Scope(env);
-                                for (var i = 0; i < names.length; ++i)
-                                        env.set("funcs", names[i], values[i]);
-                                return env;
-                        })(cadr(expr), env));
-                    case LABELS:
-                        return eval_sequence(cddr(expr), (function(defs, env){
-                                while (!nullp(defs)) {
-                                        var f = car(defs);
-                                        env = new Scope(env);
-                                        env.set("funcs", car(f), make_lambda(cadr(f), cddr(f), env));
-                                        defs = cdr(defs);
-                                }
-                                return env;
-                        })(cadr(expr), env));
-                    case SETQ:
-                        return (function(defs){
-                                var val = NIL;
-                                while (!nullp(defs)) {
-                                        val = eval(cadr(defs), env);
-                                        env.set("vars", car(defs), val);
-                                        defs = cddr(defs);
-                                }
-                                return val;
-                        })(cdr(expr));
-                    case PROGN:
-                        return eval_sequence(cdr(expr), env);
-                    case DEFUN:
-                        return (function(name, args, body){
-                                return _GLOBAL_SCOPE_.set("funcs", name, make_lambda(args, body, env));
-                        })(cadr(expr), caddr(expr), cdddr(expr));
-                    default:
-                        var func = env.get("funcs", car(expr));
-                        if (!func)
-                                throw new Error("Undefined function: " + write_ast_to_string(car(expr)));
-                        return apply(func, eval_list(cdr(expr), env));
-                }
-                else if (caar(expr) === LAMBDA) {
-                        return eval_sequence(cddar(expr),
-                                             env.fork("vars",
-                                                      cadar(expr),
-                                                      eval_list(cdr(expr), env)));
-                }
-        };
-        function eval_if(condition, consequent, alternative, env) {
-                if (eval(condition, env) !== NIL)
-                        return eval(consequent, env);
-                else return eval(alternative, env);
-        };
-        function eval_list(list, env) {
-                if (nullp(list)) return NIL;
-                return cons(eval(car(list), env),
-                            eval_list(cdr(list), env));
-        };
-        function eval_sequence(list, env) {
-                var ret = NIL;
-                while (!nullp(list)) {
-                        ret = eval(car(list), env);
-                        list = cdr(list);
-                }
-                return ret;
-        };
-        function make_lambda(args, body, env) {
-                return [ args, body, env ];
-        };
-        function apply(func, values) {
-                if (func instanceof Function) {
-                        return func.apply(null, list_to_array(values));
-                }
-                else if (func instanceof Array) {
-                        var names = func[0], body = func[1], env = func[2];
-                        return eval_sequence(body, env.fork("vars", names, values));
-                }
-        };
-});
-
 exports.write_ast_to_string = write_ast_to_string;
 exports.read = read;
-exports.eval = eval;
-exports.make_string_stream = make_string_stream;
-exports.analyze = analyze;
-exports.eval2 = function(ast, env) {
+exports.eval = function(ast, env) {
         return analyze(ast)(env || _GLOBAL_SCOPE_);
 };
+exports.make_string_stream = make_string_stream;
+exports.analyze = analyze;
 
 /* -----[ Arithmetic ]----- */
 
