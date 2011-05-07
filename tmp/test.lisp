@@ -1,8 +1,8 @@
-(labels ((fact (n)
-           (if (eq n 1) 1
-               (* n (fact (- n 1))))))
-  (fact 10))
-
-(flet ((foo (x)
-         (+ x 1)))
-  (foo 10))
+(let ((count (let ((val 0))
+               (lambda ()
+                 (setq val (+ val 1))))))
+  (funcall count)
+  (funcall count)
+  (funcall count)
+  (funcall count)
+  (funcall count))

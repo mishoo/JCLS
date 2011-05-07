@@ -448,7 +448,8 @@ Scope.prototype = {
         },
         get: function(ns, name) {
                 if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol");
-                return this.ns(ns)[name] || this.parent && this.parent.get(ns, name);
+                var tmp = this.ns(ns);
+                return HOP(tmp, name) ? tmp[name] : (this.parent && this.parent.get(ns, name));
         },
         set: function(ns, name, value) {
                 if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol");
@@ -483,6 +484,7 @@ var LST = {};
                         var a = i.toString(2);
                         while (a.length < n + 1) a = "0" + a;
                         var name = "C" + a.replace(/0/g, "A").replace(/1/g, "D") + "R";
+                        //console.log("var " + name.toLowerCase() + " = LST." + name.toLowerCase() + ";");
                         var func = compose.apply(null, a.split("").map(function(ch){ return base[ch] }));
                         _GLOBAL_SCOPE_.set("funcs", CL.intern(name), func);
                         LST[name.toLowerCase()] = func;
@@ -490,6 +492,35 @@ var LST = {};
                 n++;
         }
 })(1);
+
+var caar = LST.caar;
+var cadr = LST.cadr;
+var cdar = LST.cdar;
+var cddr = LST.cddr;
+var caaar = LST.caaar;
+var caadr = LST.caadr;
+var cadar = LST.cadar;
+var caddr = LST.caddr;
+var cdaar = LST.cdaar;
+var cdadr = LST.cdadr;
+var cddar = LST.cddar;
+var cdddr = LST.cdddr;
+var caaaar = LST.caaaar;
+var caaadr = LST.caaadr;
+var caadar = LST.caadar;
+var caaddr = LST.caaddr;
+var cadaar = LST.cadaar;
+var cadadr = LST.cadadr;
+var caddar = LST.caddar;
+var cadddr = LST.cadddr;
+var cdaaar = LST.cdaaar;
+var cdaadr = LST.cdaadr;
+var cdadar = LST.cdadar;
+var cdaddr = LST.cdaddr;
+var cddaar = LST.cddaar;
+var cddadr = LST.cddadr;
+var cdddar = LST.cdddar;
+var cddddr = LST.cddddr;
 
 var eval = (function(){
         var QUOTE = CL.intern("QUOTE")
@@ -499,8 +530,11 @@ var eval = (function(){
         , CDR     = CL.intern("CDR")
         , CONS    = CL.intern("CONS")
         , IF      = CL.intern("IF")
-        , LABELS  = CL.intern("LABELS")
+        , LET     = CL.intern("LET")
+        , LET_    = CL.intern("LET*")
         , FLET    = CL.intern("FLET")
+        , LABELS  = CL.intern("LABELS")
+        , SETQ    = CL.intern("SETQ")
         , LAMBDA  = CL.intern("LAMBDA");
 
         _GLOBAL_SCOPE_.defun(CL.intern("FUNCALL"), function() {
@@ -535,56 +569,90 @@ var eval = (function(){
                 else if (numberp(expr) || stringp(expr)) return expr;
                 else if (atom(car(expr))) switch (car(expr)) {
                     case QUOTE:
-                        return LST.cadr(expr);
+                        return cadr(expr);
                     case ATOM:
-                        return atom(eval(LST.cadr(expr), env));
+                        return atom(eval(cadr(expr), env));
                     case EQ:
-                        return eq(eval(LST.cadr(expr), env),
-                                  eval(LST.caddr(expr), env));
+                        return eq(eval(cadr(expr), env),
+                                  eval(caddr(expr), env));
                     case CAR:
-                        return car(eval(LST.cadr(expr), env));
+                        return car(eval(cadr(expr), env));
                     case CDR:
-                        return cdr(eval(LST.cadr(expr), env));
+                        return cdr(eval(cadr(expr), env));
                     case CONS:
-                        return cons(eval(LST.cadr(expr), env), eval(LST.caddr(expr), env));
+                        return cons(eval(cadr(expr), env), eval(caddr(expr), env));
                     case IF:
-                        return eval_if(LST.cadr(expr), LST.caddr(expr), LST.cadddr(expr), env);
+                        return eval_if(cadr(expr), caddr(expr), cadddr(expr), env);
                     case LAMBDA:
-                        return make_lambda(LST.cadr(expr), LST.cddr(expr), env);
-                    case FLET:
-                        return eval_sequence(LST.cddr(expr), (function(defs, env){
+                        return make_lambda(cadr(expr), cddr(expr), env);
+                    case LET:
+                        return eval_sequence(cddr(expr), (function(defs, env){
                                 var names = [], values = [];
                                 while (!nullp(defs)) {
                                         var f = car(defs);
                                         names.push(car(f));
-                                        values.push(make_lambda(LST.cadr(f), LST.cddr(f), env));
+                                        values.push(eval(cadr(f), env));
+                                        defs = cdr(defs);
+                                }
+                                env = new Scope(env);
+                                for (var i = 0; i < names.length; ++i)
+                                        env.set("vars", names[i], values[i]);
+                                return env;
+                        })(cadr(expr), env));
+                    case LET_:
+                        return eval_sequence(cddr(expr), (function(defs, env){
+                                while (!nullp(defs)) {
+                                        var f = car(defs);
+                                        env = new Scope(env);
+                                        env.set("vars", car(f), eval(cadr(f), env));
+                                        defs = cdr(defs);
+                                }
+                                return env;
+                        })(cadr(expr), env));
+                    case FLET:
+                        return eval_sequence(cddr(expr), (function(defs, env){
+                                var names = [], values = [];
+                                while (!nullp(defs)) {
+                                        var f = car(defs);
+                                        names.push(car(f));
+                                        values.push(make_lambda(cadr(f), cddr(f), env));
                                         defs = cdr(defs);
                                 }
                                 env = new Scope(env);
                                 for (var i = 0; i < names.length; ++i)
                                         env.set("funcs", names[i], values[i]);
                                 return env;
-                        })(LST.cadr(expr), env));
+                        })(cadr(expr), env));
                     case LABELS:
-                        return eval_sequence(LST.cddr(expr), (function(defs, env){
+                        return eval_sequence(cddr(expr), (function(defs, env){
                                 while (!nullp(defs)) {
                                         var f = car(defs);
                                         env = new Scope(env);
-                                        env.set("funcs", car(f), make_lambda(LST.cadr(f), LST.cddr(f), env));
+                                        env.set("funcs", car(f), make_lambda(cadr(f), cddr(f), env));
                                         defs = cdr(defs);
                                 }
                                 return env;
-                        })(LST.cadr(expr), env));
+                        })(cadr(expr), env));
+                    case SETQ:
+                        return (function(defs){
+                                var val = NIL;
+                                while (!nullp(defs)) {
+                                        val = eval(cadr(defs), env);
+                                        env.set("vars", car(defs), val);
+                                        defs = cddr(defs);
+                                }
+                                return val;
+                        })(cdr(expr));
                     default:
                         var func = env.get("funcs", car(expr));
                         if (!func)
                                 throw new Error("Undefined function: " + write_ast_to_string(car(expr)));
                         return apply(func, eval_list(cdr(expr), env));
                 }
-                else if (LST.caar(expr) === LAMBDA) {
-                        return eval_sequence(LST.cddar(expr),
+                else if (caar(expr) === LAMBDA) {
+                        return eval_sequence(cddar(expr),
                                              env.fork("vars",
-                                                      LST.cadar(expr),
+                                                      cadar(expr),
                                                       eval_list(cdr(expr), env)));
                 }
         };
