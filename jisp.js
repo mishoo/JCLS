@@ -73,9 +73,13 @@ function list_to_array(list) {
         return a;
 };
 
+function array_to_list(a) {
+        if (a.length == 0) return NIL;
+        return cons(a[0], array_to_list([].slice.call(a, 1)));
+};
+
 /* -----[ Symbols and packages ]----- */
 
-var _READTABLE_;
 var _PACKAGE_;
 var _ALL_PACKAGES_ = {};
 
@@ -103,6 +107,9 @@ Symbol.prototype = {
         },
         full_name: function() {
                 return this._fullname;
+        },
+        name: function() {
+                return this._name;
         },
         set: function(name, val) {
                 this._plist[name] = val;
@@ -133,12 +140,11 @@ Package.get = function(name) {
 
 Package.prototype = {
         find_symbol: function(name) {
-                var sym = this._symbols[name];
-                if (sym) return sym;
-                for (var i = 0; i < this._use_list; ++i) {
-                        var p = this._use_list[i];
-                        sym = p._symbols[name];
-                        if (sym) return sym;
+                if (HOP(this._symbols, name))
+                        return this._symbols[name];
+                for (var i = 0; i < this._use_list.length; ++i) {
+                        var sym = this._use_list[i].find_symbol(name);
+                        if (sym != null) return sym;
                 }
         },
         intern: function(name) {
@@ -155,11 +161,12 @@ Package.prototype = {
 };
 
 var CL = new Package("CL");
-_PACKAGE_ = CL;
-// XXX: we have a problem with symbol inheritance
-// _PACKAGE_ = new Package("CL-USER", {
-//         use: [ "CL" ]
-// });
+var KEYWORD = new Package("KEYWORD");
+var CL_USER = new Package("CL-USER", {
+        use: [ "CL" ]
+});
+
+_PACKAGE_ = CL_USER;
 
 /* -----[ the reader ]----- */
 
@@ -178,9 +185,7 @@ function make_string_stream($SOURCE) {
                 return ch;
         };
         function skip_ws() {
-                read_while(function(ch){
-                        return is_whitespace(ch);
-                });
+                read_while(is_whitespace);
         };
         function read_while(test) {
                 var str = "";
@@ -201,6 +206,7 @@ function make_string_stream($SOURCE) {
                 get col() { return $col },
                 get pos() { return $pos },
                 get in_backquote() { return backquote > 0 },
+                get rest() { return rest() },
 
                 error: function(text) {
                         throw new Error(text + "\nLine: " + $line
@@ -232,7 +238,7 @@ function is_whitespace(ch) {
         return HOP(WHITESPACE_CHARS, ch);
 };
 
-var SPECIAL_CHARS = {
+var _READTABLE_ = {
         "(": read_standard_list,
         '"': read_string,
         "'": read_quote,
@@ -241,6 +247,7 @@ var SPECIAL_CHARS = {
         "|": read_pipe,
         "#": read_sharp,
 
+        ":": read_keyword,
         ";": ignore_comment,
 
         ")": function(stream) {
@@ -265,7 +272,7 @@ function ignore_comment(stream) {
 };
 
 function read_delimited_list(stream, endchar) {
-        var list = NIL, ret;
+        var list = NIL, ret = NIL;
         while (true) {
                 stream.skip_ws();
                 if (stream.peek() == endchar) {
@@ -331,24 +338,26 @@ function read_sharp(stream) {
         // TBD
 };
 
-function read_symbol(stream) {
+function read_symbol(stream, pack) {
         var esc = false, colon = null, str = "";
         while (true) {
                 var ch = stream.peek();
                 if (esc) { str += stream.next(); esc = false; }
                 else if (ch == ":") {
-                        if (colon != null) stream.error("too many colons");
+                        if (colon != null || pack === KEYWORD)
+                                stream.error("too many colons");
                         colon = str.length; str += stream.next();
                 }
                 else if (ch == "\\") { esc = true; stream.next(); }
-                else if (HOP(SPECIAL_CHARS, ch)) break;
+                else if (HOP(_READTABLE_, ch)) break;
                 str += stream.next();
         }
         if (/^[0-9]*\.?[0-9]+$/.test(str)) {
                 return parseFloat(str);
         }
         str = str.toUpperCase();
-        var pack = _PACKAGE_, n = str;
+        if (pack == null) pack = _PACKAGE_;
+        var n = str;
         if (colon) {
                 var p = str.substr(0, colon);
                 n = str.substr(colon + 1);
@@ -358,6 +367,10 @@ function read_symbol(stream) {
         return pack.intern(n);
 };
 
+function read_keyword(stream) {
+        return read_symbol(stream, KEYWORD);
+};
+
 function read(stream, eof_error, eof_value) {
         if (arguments.length == 1) eof_error = true;
         var ch = stream.peek();
@@ -365,11 +378,11 @@ function read(stream, eof_error, eof_value) {
                 if (eof_error) stream.error("end of input");
                 return eof_value;
         }
-        var reader = SPECIAL_CHARS[ch];
+        var reader = _READTABLE_[ch];
         if (reader) {
                 stream.next();
                 while (true) {
-                        var ret = reader(stream);
+                        var ret = reader(stream, ch);
                         if (ret == null) ret = read(stream, eof_error, eof_value);
                         if (ret != null) return ret;
                 }
@@ -395,7 +408,7 @@ function write_ast_to_string(node) {
                 ret = "(" + ret + ")";
         }
         else if (symbolp(node)) {
-                ret = node.full_name();
+                ret = node.name();
         }
         else {
                 ret = node;
@@ -405,16 +418,8 @@ function write_ast_to_string(node) {
 
 /* -----[ evaluator stuff ]----- */
 
-var NIL = CL.intern("NIL");
-var T = CL.intern("T");
-CL.intern("IF");
-CL.intern("LAMBDA");
-CL.intern("QUOTE");
-CL.intern("CONS");
-CL.intern("ATOM");
-CL.intern("EQ");
-CL.intern("CAR");
-CL.intern("CDR");
+var NIL = CL.intern("NIL"); NIL.toString = function() { return "NIL" };
+var T = CL.intern("T"); T.toString = function() { return "T" };
 
 function nullp(arg) { return arg === NIL };
 function consp(arg) { return arg instanceof Pair || nullp(arg) };
@@ -441,7 +446,7 @@ var LST = {};
                         while (a.length < n + 1) a = "0" + a;
                         var name = "C" + a.replace(/0/g, "A").replace(/1/g, "D") + "R";
                         var func = compose.apply(null, a.split("").map(function(ch){ return base[ch] }));
-                        CL.intern(name).set("COMPILED", func);
+                        CL.intern(name).set("FUNCTION", func);
                         LST[name.toLowerCase()] = func;
                 }
                 n++;
@@ -476,16 +481,23 @@ Scope.prototype = {
 };
 
 var eval = (function(){
-        var QUOTE = CL.find_symbol("QUOTE"),
-            ATOM = CL.find_symbol("ATOM"),
-            EQ = CL.find_symbol("EQ"),
-            CAR = CL.find_symbol("CAR"),
-            CDR = CL.find_symbol("CDR"),
-            CONS = CL.find_symbol("CONS"),
-            IF = CL.find_symbol("IF"),
-            LAMBDA = CL.find_symbol("LAMBDA");
+        var QUOTE = CL.intern("QUOTE")
+        , ATOM = CL.intern("ATOM")
+        , EQ = CL.intern("EQ")
+        , CAR = CL.intern("CAR")
+        , CDR = CL.intern("CDR")
+        , CONS = CL.intern("CONS")
+        , IF = CL.intern("IF")
+        , LABELS = CL.intern("LABELS")
+        , LAMBDA = CL.intern("LAMBDA");
+
+        CL.intern("FUNCALL").set("FUNCTION", function() {
+                var list = array_to_list(arguments);
+                var func = car(list), args = cdr(list);
+                return apply(func, args);
+        });
+
         return function eval(expr, env) {
-                //console.log(write_ast_to_string(expr));
                 if (env == null) env = new Scope();
                 if (symbolp(expr)) switch (expr) {
                     case NIL:
@@ -511,13 +523,13 @@ var eval = (function(){
                         return cons(eval(LST.cadr(expr), env), eval(LST.caddr(expr), env));
                     case IF:
                         return eval_if(LST.cadr(expr), LST.caddr(expr), LST.cadddr(expr), env);
+                    case LAMBDA:
+                        return make_lambda(LST.cadr(expr), LST.cddr(expr), env);
                     default:
-                        var func = car(expr).get("COMPILED");
-                        if (func)
-                                return func.apply(null, list_to_array(eval_list(cdr(expr), env)));
-                        func = car(expr).get("FUNCTION");
-                        if (!func) throw new Error("Undefined function: " + write_ast_to_string(car(expr)));
-                        throw new Error("No support for this yet");
+                        var func = car(expr).get("FUNCTION");
+                        if (!func)
+                                throw new Error("Undefined function: " + write_ast_to_string(car(expr)));
+                        return apply(func, eval_list(cdr(expr), env));
                 }
                 else if (LST.caar(expr) === LAMBDA) {
                         return eval_sequence(LST.cddar(expr),
@@ -543,6 +555,18 @@ var eval = (function(){
                 }
                 return ret;
         };
+        function make_lambda(args, body, env) {
+                return [ args, body, env ];
+        };
+        function apply(func, values) {
+                if (func instanceof Function) {
+                        return func.apply(null, list_to_array(values));
+                }
+                else if (func instanceof Array) {
+                        var names = func[0], body = func[1], env = func[2];
+                        return eval_sequence(body, env.extend(names, values));
+                }
+        };
 }());
 
 exports.write_ast_to_string = write_ast_to_string;
@@ -552,18 +576,18 @@ exports.make_string_stream = make_string_stream;
 
 /* -----[ Few utility functions ]----- */
 
-CL.intern("+").set("COMPILED", function(a, b){
+CL.intern("+").set("FUNCTION", function(a, b){
         return [].slice.call(arguments).reduce(function(a, b){ return a + b }, 0);
 });
 
-CL.intern("-").set("COMPILED", function(){
+CL.intern("-").set("FUNCTION", function(){
         return [].slice.call(arguments, 1).reduce(function(a, b){ return a - b }, arguments[0]);
 });
 
-CL.intern("*").set("COMPILED", function(){
+CL.intern("*").set("FUNCTION", function(){
         return [].slice.call(arguments).reduce(function(a, b){ return a * b }, 1);
 });
 
-CL.intern("/").set("COMPILED", function(){
+CL.intern("/").set("FUNCTION", function(){
         return [].slice.call(arguments, 1).reduce(function(a, b){ return a / b }, arguments[0]);
 });
