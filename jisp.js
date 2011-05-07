@@ -103,7 +103,7 @@ function Symbol(pack, name) {
 
 Symbol.prototype = {
         toString: function() {
-                return this._package + ":" + this._name;
+                return this._fullname;
         },
         full_name: function() {
                 return this._fullname;
@@ -431,9 +431,7 @@ function atom(x) { return symbolp(x) || numberp(x) || stringp(x) };
 function quote(x) { return x };
 
 function eq(x, y) {
-        if (atom(x) && atom(y) && x === y) return true;
-        if (x === null && y === null) return true;
-        return false;
+        return (atom(x) && atom(y) && x === y) ? T : NIL;
 };
 
 /* -----[ Env ]----- */
@@ -459,7 +457,7 @@ Scope.prototype = {
         defun: function(name, value) {
                 return this.set("funcs", name, value);
         },
-        extend: function(ns, names, value) {
+        extend: function(ns, names, values) {
                 while (names !== NIL) {
                         var name = car(names);
                         this.set(ns, name, car(values));
@@ -502,6 +500,7 @@ var eval = (function(){
         , CONS    = CL.intern("CONS")
         , IF      = CL.intern("IF")
         , LABELS  = CL.intern("LABELS")
+        , FLET    = CL.intern("FLET")
         , LAMBDA  = CL.intern("LAMBDA");
 
         _GLOBAL_SCOPE_.defun(CL.intern("FUNCALL"), function() {
@@ -540,7 +539,8 @@ var eval = (function(){
                     case ATOM:
                         return atom(eval(LST.cadr(expr), env));
                     case EQ:
-                        return eq(eval(LST.cadr(expr), env), eval(LST.caddr(expr), env));
+                        return eq(eval(LST.cadr(expr), env),
+                                  eval(LST.caddr(expr), env));
                     case CAR:
                         return car(eval(LST.cadr(expr), env));
                     case CDR:
@@ -551,6 +551,30 @@ var eval = (function(){
                         return eval_if(LST.cadr(expr), LST.caddr(expr), LST.cadddr(expr), env);
                     case LAMBDA:
                         return make_lambda(LST.cadr(expr), LST.cddr(expr), env);
+                    case FLET:
+                        return eval_sequence(LST.cddr(expr), (function(defs, env){
+                                var names = [], values = [];
+                                while (!nullp(defs)) {
+                                        var f = car(defs);
+                                        names.push(car(f));
+                                        values.push(make_lambda(LST.cadr(f), LST.cddr(f), env));
+                                        defs = cdr(defs);
+                                }
+                                env = new Scope(env);
+                                for (var i = 0; i < names.length; ++i)
+                                        env.set("funcs", names[i], values[i]);
+                                return env;
+                        })(LST.cadr(expr), env));
+                    case LABELS:
+                        return eval_sequence(LST.cddr(expr), (function(defs, env){
+                                while (!nullp(defs)) {
+                                        var f = car(defs);
+                                        env = new Scope(env);
+                                        env.set("funcs", car(f), make_lambda(LST.cadr(f), LST.cddr(f), env));
+                                        defs = cdr(defs);
+                                }
+                                return env;
+                        })(LST.cadr(expr), env));
                     default:
                         var func = env.get("funcs", car(expr));
                         if (!func)
@@ -570,7 +594,7 @@ var eval = (function(){
                 else return eval(alternative, env);
         };
         function eval_list(list, env) {
-                if (list === NIL) return NIL;
+                if (nullp(list)) return NIL;
                 return cons(eval(car(list), env),
                             eval_list(cdr(list), env));
         };
