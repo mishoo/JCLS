@@ -517,9 +517,9 @@ var eval = (function(){
         CL.defun("APPLY", function(func) {
                 var list = NIL, tmp = NIL;
                 for (var i = 1; i < arguments.length - 1; ++i) {
-                        var cell = cons(i, NIL);
-                        if (tmp) set_cdr(tmp, cell);
-                        if (!list) list = cell;
+                        var cell = cons(arguments[i], NIL);
+                        if (!nullp(tmp)) set_cdr(tmp, cell);
+                        if (nullp(list)) list = cell;
                         tmp = cell;
                 }
                 if (tmp) set_cdr(tmp, arguments[arguments.length - 1]);
@@ -535,7 +535,8 @@ var eval = (function(){
                     case T:
                         return T;
                     default:
-                        return env.get("vars", expr);
+                        if (expr._package === KEYWORD) return expr;
+                        else return env.get("vars", expr);
                 }
                 else if (numberp(expr) || stringp(expr)) return expr;
                 else if (atom(car(expr))) switch (car(expr)) {
