@@ -436,7 +436,47 @@ function eq(x, y) {
         return false;
 };
 
+/* -----[ Env ]----- */
+
+function Scope(parent) {
+        this.parent = parent;
+        this.ns_vars = {};
+        this.ns_funcs = {};
+};
+
+Scope.prototype = {
+        ns: function(ns) {
+                return this["ns_" + ns];
+        },
+        get: function(ns, name) {
+                if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol");
+                return this.ns(ns)[name] || this.parent && this.parent.get(ns, name);
+        },
+        set: function(ns, name, value) {
+                if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol");
+                this.ns(ns)[name] = value;
+        },
+        defun: function(name, value) {
+                return this.set("funcs", name, value);
+        },
+        extend: function(ns, names, value) {
+                while (names !== NIL) {
+                        var name = car(names);
+                        this.set(ns, name, car(values));
+                        names = cdr(names);
+                        values = cdr(values);
+                }
+                return this;
+        },
+        fork: function(ns, names, values) {
+                if (nullp(names)) return this;
+                var s = new Scope(this);
+                return s.extend(ns, names, values);
+        }
+};
+
 // auto-generate c[ad]+r combinations
+var _GLOBAL_SCOPE_ = new Scope();
 var LST = {};
 (function(n){
         var base = [ car, cdr ];
@@ -446,66 +486,52 @@ var LST = {};
                         while (a.length < n + 1) a = "0" + a;
                         var name = "C" + a.replace(/0/g, "A").replace(/1/g, "D") + "R";
                         var func = compose.apply(null, a.split("").map(function(ch){ return base[ch] }));
-                        CL.intern(name).set("FUNCTION", func);
+                        _GLOBAL_SCOPE_.set("funcs", CL.intern(name), func);
                         LST[name.toLowerCase()] = func;
                 }
                 n++;
         }
 })(1);
 
-/* -----[ Env ]----- */
-
-function Scope(parent) {
-        this.parent = parent;
-        this.vars = {};
-};
-
-Scope.prototype = {
-        get: function(symbol) {
-                if (symbol instanceof Symbol)
-                        symbol = symbol.full_name();
-                return this.vars[symbol] || this.parent && this.parent.get(symbol);
-        },
-        extend: function(names, values) {
-                var s = names !== NIL ? new Scope(this) : this;
-                while (names !== NIL) {
-                        var name = car(names);
-                        if (name instanceof Symbol)
-                                name = name.full_name();
-                        s.vars[name] = car(values);
-                        names = cdr(names);
-                        values = cdr(values);
-                }
-                return s;
-        }
-};
-
 var eval = (function(){
         var QUOTE = CL.intern("QUOTE")
-        , ATOM = CL.intern("ATOM")
-        , EQ = CL.intern("EQ")
-        , CAR = CL.intern("CAR")
-        , CDR = CL.intern("CDR")
-        , CONS = CL.intern("CONS")
-        , IF = CL.intern("IF")
-        , LABELS = CL.intern("LABELS")
-        , LAMBDA = CL.intern("LAMBDA");
+        , ATOM    = CL.intern("ATOM")
+        , EQ      = CL.intern("EQ")
+        , CAR     = CL.intern("CAR")
+        , CDR     = CL.intern("CDR")
+        , CONS    = CL.intern("CONS")
+        , IF      = CL.intern("IF")
+        , LABELS  = CL.intern("LABELS")
+        , LAMBDA  = CL.intern("LAMBDA");
 
-        CL.intern("FUNCALL").set("FUNCTION", function() {
+        _GLOBAL_SCOPE_.defun(CL.intern("FUNCALL"), function() {
                 var list = array_to_list(arguments);
                 var func = car(list), args = cdr(list);
                 return apply(func, args);
         });
 
+        _GLOBAL_SCOPE_.defun(CL.intern("APPLY"), function(func) {
+                var list = NIL, tmp = NIL;
+                for (var i = 1; i < arguments.length - 1; ++i) {
+                        var cell = cons(i, NIL);
+                        if (tmp) set_cdr(tmp, cell);
+                        if (!list) list = cell;
+                        tmp = cell;
+                }
+                if (tmp) set_cdr(tmp, arguments[arguments.length - 1]);
+                else list = arguments[arguments.length - 1];
+                return apply(func, list);
+        });
+
         return function eval(expr, env) {
-                if (env == null) env = new Scope();
+                if (env == null) env = _GLOBAL_SCOPE_;
                 if (symbolp(expr)) switch (expr) {
                     case NIL:
                         return NIL;
                     case T:
                         return T;
                     default:
-                        return env.get(expr);
+                        return env.get("vars", expr);
                 }
                 else if (numberp(expr) || stringp(expr)) return expr;
                 else if (atom(car(expr))) switch (car(expr)) {
@@ -526,15 +552,16 @@ var eval = (function(){
                     case LAMBDA:
                         return make_lambda(LST.cadr(expr), LST.cddr(expr), env);
                     default:
-                        var func = car(expr).get("FUNCTION");
+                        var func = env.get("funcs", car(expr));
                         if (!func)
                                 throw new Error("Undefined function: " + write_ast_to_string(car(expr)));
                         return apply(func, eval_list(cdr(expr), env));
                 }
                 else if (LST.caar(expr) === LAMBDA) {
                         return eval_sequence(LST.cddar(expr),
-                                             env.extend(LST.cadar(expr),
-                                                        eval_list(cdr(expr), env)));
+                                             env.fork("vars",
+                                                      LST.cadar(expr),
+                                                      eval_list(cdr(expr), env)));
                 }
         };
         function eval_if(condition, consequent, alternative, env) {
@@ -564,7 +591,7 @@ var eval = (function(){
                 }
                 else if (func instanceof Array) {
                         var names = func[0], body = func[1], env = func[2];
-                        return eval_sequence(body, env.extend(names, values));
+                        return eval_sequence(body, env.fork("vars", names, values));
                 }
         };
 }());
@@ -574,20 +601,20 @@ exports.read = read;
 exports.eval = eval;
 exports.make_string_stream = make_string_stream;
 
-/* -----[ Few utility functions ]----- */
+/* -----[ Arithmetic ]----- */
 
-CL.intern("+").set("FUNCTION", function(a, b){
+_GLOBAL_SCOPE_.defun(CL.intern("+"), function(a, b){
         return [].slice.call(arguments).reduce(function(a, b){ return a + b }, 0);
 });
 
-CL.intern("-").set("FUNCTION", function(){
+_GLOBAL_SCOPE_.defun(CL.intern("-"), function(){
         return [].slice.call(arguments, 1).reduce(function(a, b){ return a - b }, arguments[0]);
 });
 
-CL.intern("*").set("FUNCTION", function(){
+_GLOBAL_SCOPE_.defun(CL.intern("*"), function(){
         return [].slice.call(arguments).reduce(function(a, b){ return a * b }, 1);
 });
 
-CL.intern("/").set("FUNCTION", function(){
+_GLOBAL_SCOPE_.defun(CL.intern("/"), function(){
         return [].slice.call(arguments, 1).reduce(function(a, b){ return a / b }, arguments[0]);
 });
