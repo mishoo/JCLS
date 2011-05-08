@@ -1,4 +1,4 @@
-/* -----[ functional utilities ]----- */
+/* -----[ utils ]----- */
 
 function compose(a, rest) {
         if (rest == null) return a;
@@ -635,6 +635,12 @@ var analyze = (function(){
                 var name = car(ast), func = do_lambda(cadr(ast), cddr(ast));
                 return function(env) {
                         return _GLOBAL_SCOPE_.force("funcs", name, func(env));
+                };
+        });
+        CL.special("FUNCTION", function(ast){
+                var name = car(ast);
+                return function(env) {
+                        return env.get("funcs", name);
                 };
         });
 
