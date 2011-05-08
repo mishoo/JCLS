@@ -1,6 +1,54 @@
 ;; foo
 ;; bar
 
+(progn
+
+  (defun map (list proc)
+    (if list
+        (cons (funcall proc (car list))
+              (map (cdr list) proc))))
+
+  (defun append (a b)
+    (if a
+        (cons (car a) (append (cdr a) b))
+        b))
+
+  ;; quite inefficient
+  (defun reverse (list)
+    (if list
+        (append (reverse (cdr list)) (cons (car list) nil))))
+
+  (io:log (reverse '(1 2 3)))
+
+  (defun range (x)
+    (if (> x 0)
+        (cons x (range (- x 1)))))
+
+  (map (reverse (range 100))
+       (lambda (x)
+         (* x x)))
+
+  ;; test comment
+
+  )
+
+
+
+
+
+(progn
+  (let ((tmp 0))
+    (defun count ()
+      (setq tmp (+ tmp 1))))
+  (io:log (count))
+  (io:log (count))
+  (io:log (count))
+  (io:log (count)))
+
+(let ((x 10))
+  (setq x 20)
+  x)
+
 (labels ((fact (n)
            (if (= n 1) 1
                (* n (fact (- n 1))))))

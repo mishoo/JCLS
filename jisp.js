@@ -197,12 +197,19 @@ function make_string_stream($SOURCE) {
                 try { return cont(); }
                 finally { --backquote; commas = prev_commas; }
         };
+        var list = 0;
+        function with_list(cont) {
+                ++list;
+                try { return cont(); }
+                finally { --list; }
+        };
         return {
                 get line() { return $line },
                 get col() { return $col },
                 get pos() { return $pos },
                 get in_backquote() { return backquote > 0 },
                 get rest() { return rest() },
+                get in_list() { return list },
 
                 error: function(text) {
                         throw new Error(text + "\nLine: " + $line
@@ -215,6 +222,7 @@ function make_string_stream($SOURCE) {
                 skip_ws: skip_ws,
                 read_while: read_while,
                 with_backquote: with_backquote,
+                with_list: with_list,
                 add_comma: function() {
                         ++commas;
                 }
@@ -268,24 +276,26 @@ function ignore_comment(stream) {
 };
 
 function read_delimited_list(stream, endchar) {
-        var list = NIL, ret = NIL;
-        while (true) {
-                stream.skip_ws();
-                if (stream.peek() == endchar) {
-                        stream.next();
-                        return ret;
-                } else {
-                        var el = read(stream);
-                        if (el != null) {
-                                var tmp = cons(el, NIL);
-                                if (!nullp(list)) {
-                                        set_cdr(list, tmp);
-                                } else
-                                        ret = tmp;
-                                list = tmp;
+        return stream.with_list(function(){
+                var list = NIL, ret = NIL;
+                while (true) {
+                        stream.skip_ws();
+                        if (stream.peek() == endchar) {
+                                stream.next();
+                                return ret;
+                        } else {
+                                var el = read(stream);
+                                if (el != null) {
+                                        var tmp = cons(el, NIL);
+                                        if (!nullp(list)) {
+                                                set_cdr(list, tmp);
+                                        } else
+                                                ret = tmp;
+                                        list = tmp;
+                                }
                         }
                 }
-        }
+        });
 };
 
 function read_standard_list(stream) {
@@ -375,11 +385,14 @@ function read(stream, eof_error, eof_value) {
                 if (eof_error) stream.error("end of input");
                 return eof_value;
         }
-        var reader = _READTABLE_[ch];
+        var reader = _READTABLE_[ch], ret;
         if (reader) {
                 stream.next();
-                var ret = reader(stream, ch);
-                return ret != null ? ret : read(stream, eof_error, eof_value);
+                ret = reader(stream, ch);
+                if (ret == null && !stream.in_list)
+                        // toplevel comment, advance
+                        ret = read(stream, eof_error, eof_value);
+                return ret;
         }
         else return read_symbol(stream);
 };
@@ -449,9 +462,8 @@ Scope.prototype = {
                 if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol");
                 var tmp = this.ns(ns);
                 if (HOP(tmp, name)) return tmp[name] = value;
-                else if (this.parent) this.parent.set(ns, name, value);
-                //else throw new Error("Undeclared variable " + name); //;; WTF?
-                else return tmp[name] = value;
+                else if (this.parent) return this.parent.set(ns, name, value);
+                else throw new Error("Undeclared variable " + name);
         },
         force: function(ns, name, value) {
                 if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol");
@@ -512,6 +524,11 @@ var caar = LST.caar
 , cdddar = LST.cdddar
 , cddddr = LST.cddddr;
 
+CL.defun("ATOM", atom);
+CL.defun("EQ", eq);
+CL.defun("CONS", cons);
+CL.defun("LIST", function(){ return array_to_list(arguments) });
+
 var analyze = (function(){
         var LAMBDA  = CL.intern("LAMBDA");
 
@@ -533,10 +550,6 @@ var analyze = (function(){
                 else list = arguments[arguments.length - 1];
                 return apply(func, list);
         });
-
-        CL.defun("ATOM", atom);
-        CL.defun("EQ", eq);
-        CL.defun("CONS", cons);
 
         CL.special("QUOTE", function(ast){ return itself(car(ast)) });
         CL.special("IF", function(ast){ return do_if(car(ast), cadr(ast), caddr(ast)) });
@@ -647,8 +660,6 @@ var analyze = (function(){
                 }
         };
 
-        return analyze;
-
         function itself(el) {
                 return function(){ return el };
         };
@@ -717,7 +728,7 @@ var analyze = (function(){
                         if (!nullp(names)) {
                                 env = env.fork();
                                 while (!nullp(names)) {
-                                        env.set("vars", car(names), car(values));
+                                        env.force("vars", car(names), car(values));
                                         names = cdr(names);
                                         values = cdr(values);
                                 }
@@ -725,6 +736,8 @@ var analyze = (function(){
                         return body(env);
                 }
         };
+
+        return analyze;
 
 }());
 
@@ -792,10 +805,15 @@ CL.defun(">=", function(last){
         return T;
 });
 
-/* -----[ temporary I/O ]----- */
+/* -----[ temporary stuff ]----- */
 
 (function(IO){
         IO.defun("LOG", function(){
-                console.log([].slice.call(arguments).join(", "));
+                //console.log([].slice.call(arguments).join(", "));
+                console.log(write_ast_to_string(array_to_list(arguments)));
         });
 })(new Package("IO"));
+
+// until I figure out proper SETF..
+CL.defun("SET-CAR", set_car);
+CL.defun("SET-CDR", set_cdr);
