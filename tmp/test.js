@@ -11,7 +11,9 @@ var ast = read(
         )
 );
 
-// console.log(write_ast_to_string(ast));
+console.log(write_ast_to_string(ast));
+
+console.log("-----")
 
 console.log(
         "==> " +

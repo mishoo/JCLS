@@ -1,3 +1,10 @@
+// JCLS shall be the official name of this software.
+// An implementation of 0.001% of Common Lisp in JavaScript.
+// Any help to increase this shy percent is greatly appreciated!
+//
+// (c) 2011 Mihai Bazon <mihai.bazon@gmail.com>
+// Distributed under the BSD license (header to be updated)
+
 /* -----[ utils ]----- */
 
 function compose(a, rest) {
@@ -29,6 +36,24 @@ function cdr(pair) { return nullp(pair) ? NIL : pair.second };
 function set_cdr(pair, val) { return pair.second = val };
 
 function cons(first, second) { return new Pair(first, second) };
+
+function last(list) {
+        if (nullp(list)) return NIL;
+        while (!nullp(cdr(list))) list = cdr(list);
+        return list;
+};
+
+function copy_list(list) {
+        var ret = NIL, q;
+        while (!nullp(list)) {
+                var cell = cons(car(list), NIL);
+                if (q) set_cdr(q, cell);
+                else ret = cell;
+                q = cell;
+                list = cdr(list);
+        }
+        return ret;
+}
 
 function list_to_array(list) {
         var a = [];
@@ -95,7 +120,7 @@ Symbol.prototype = {
         toString: function() {
                 return this._fullname;
         },
-        full_name: function() {
+        fullname: function() {
                 return this._fullname;
         },
         name: function() {
@@ -148,6 +173,9 @@ Package.prototype = {
         use_package: function(name) {
                 pushnew(this._use_list, Package.get(name));
         },
+        uses: function(name) {
+                return this._use_list.indexOf(name) >= 0;
+        },
         defun: function(name, func) {
                 return _GLOBAL_SCOPE_.defun(this.intern(name), func);
         },
@@ -157,6 +185,7 @@ Package.prototype = {
 };
 
 var CL = new Package("CL");
+var JCLS = new Package("JCLS");
 var KEYWORD = new Package("KEYWORD");
 var CL_USER = new Package("CL-USER", {
         use: [ "CL" ]
@@ -324,7 +353,7 @@ function read_quote(stream) {
 
 function read_backquote(stream) {
         return stream.with_backquote(function(){
-                return cons(CL.intern("BACKQUOTE"), cons(read(stream), NIL));
+                return cons(JCLS.intern("QUASIQUOTE"), cons(read(stream), NIL));
         });
 };
 
@@ -332,7 +361,12 @@ function read_comma(stream) {
         if (!stream.in_backquote)
                 stream.error("Comma not inside backquote");
         stream.add_comma();
-        return cons(CL.intern("UNQUOTE"), cons(read(stream), NIL));
+        var sym = "UNQUOTE";
+        if (stream.peek() == "@") {
+                stream.next();
+                sym = "SPLICE";
+        }
+        return cons(JCLS.intern(sym), cons(read(stream), NIL));
 };
 
 function read_pipe(stream) {
@@ -415,7 +449,10 @@ function write_ast_to_string(node) {
                 ret = "(" + ret + ")";
         }
         else if (symbolp(node)) {
-                ret = node.name();
+                if (_PACKAGE_.find_symbol(node.name()))
+                        ret = node.name();
+                else
+                        ret = node.fullname();
         }
         else {
                 ret = node;
@@ -555,6 +592,63 @@ var analyze = (function(){
                 else list = arguments[arguments.length - 1];
                 return apply(func, list);
         });
+
+        {
+                var UNQUOTE = JCLS.intern("UNQUOTE");
+                var SPLICE = JCLS.intern("SPLICE");
+                var QUASIQUOTE = JCLS.intern("QUASIQUOTE");
+                JCLS.special("QUASIQUOTE", function(stuff){
+                        stuff = car(stuff);
+                        if (!consp(stuff)) return itself(stuff);
+                        var hot = [], nest = 0;
+                        (function walk(node){
+                                var prev = NIL;
+                                while (!nullp(node)) {
+                                        if (consp(car(node))) {
+                                                var tag = caar(node);
+                                                switch (tag) {
+                                                    case UNQUOTE:
+                                                    case SPLICE:
+                                                        if (nest == 0) {
+                                                                hot.push([ tag, analyze(cadar(node)), node, prev ]);
+                                                        } else {
+                                                                --nest; walk(car(node)); ++nest;
+                                                        }
+                                                        break;
+                                                    case QUASIQUOTE:
+                                                        ++nest; walk(car(node)); --nest;
+                                                        break;
+                                                    default:
+                                                        walk(car(node));
+                                                }
+                                        }
+                                        prev = node;
+                                        node = cdr(node);
+                                }
+                        }(stuff));
+                        return function(env) {
+                                for (var i = 0; i < hot.length; ++i) {
+                                        var spot = hot[i];
+                                        var type = spot[0], value = spot[1](env), node = spot[2], prev = spot[3];
+                                        if (type == UNQUOTE) {
+                                                set_car(node, value);
+                                        } else if (type == SPLICE) {
+                                                if (!consp(value))
+                                                        throw "SPLICE (,@) wants a list!";
+                                                if (nullp(value)) {
+                                                        // just skip this node
+                                                        set_cdr(prev, cdr(node));
+                                                } else {
+                                                        value = copy_list(value);
+                                                        set_cdr(last(value), cdr(node));
+                                                        set_cdr(prev, value);
+                                                }
+                                        }
+                                }
+                                return stuff;
+                        };
+                });
+        }
 
         CL.special("QUOTE", function(ast){ return itself(car(ast)) });
         CL.special("IF", function(ast){ return do_if(car(ast), cadr(ast), caddr(ast)) });
