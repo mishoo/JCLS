@@ -444,30 +444,35 @@ function eq(x, y) {
 /* -----[ Env ]----- */
 
 function Scope(parent) {
+        function a(){};
+        if (parent) a.prototype = parent.data;
+        this.data = new a();
         this.parent = parent;
-        this.ns_vars = {};
-        this.ns_funcs = {};
 };
 
 Scope.prototype = {
-        ns: function(ns) {
-                return this["ns_" + ns];
+        full: function(ns, name) {
+                if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol"); // XXX: should be able to drop this in production code
+                return ns + "___" + name;
         },
         get: function(ns, name) {
-                if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol");
-                var tmp = this.ns(ns);
-                return HOP(tmp, name) ? tmp[name] : (this.parent && this.parent.get(ns, name));
+                return this.data[this.full(ns, name)];
+        },
+        get_origin: function(name) {
+                var s = this;
+                while (s) {
+                        if (HOP(s.data, name)) return s;
+                        s = s.parent;
+                }
         },
         set: function(ns, name, value) {
-                if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol");
-                var tmp = this.ns(ns);
-                if (HOP(tmp, name)) return tmp[name] = value;
-                else if (this.parent) return this.parent.set(ns, name, value);
-                else throw new Error("Undeclared variable " + name);
+                var full = this.full(ns, name);
+                var org = this.get_origin(full);
+                if (!org) throw new Error("Undeclared variable " + name);
+                return org.data[full] = value;
         },
         force: function(ns, name, value) {
-                if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol");
-                return this.ns(ns)[name] = value;
+                return this.data[this.full(ns, name)] = value;
         },
         defun: function(name, value) {
                 return this.force("funcs", name, value);
