@@ -2,6 +2,23 @@
 ;; bar
 
 (progn
+  (defmacro dacă (co th el)
+    (io:log "Macro-expanding for: " co th el)
+    (let ((ret `(if ,co ,th ,el)))
+      (io:log "result: " ret)
+      ret))
+  (eval
+   '(dacă (< 3 2)
+     (progn
+       (io:log "running THEN branch")
+       "Okay")
+     (progn
+       (io:log "running ELSE branch")
+       (dacă (> 2 1)
+             (progn (io:log "And 1") "Foo")
+             (progn (io:log "And two") "Boo"))))))
+
+(progn
   (defun test (x)
     `(1 ,@x ,(+ 2 3) ,@'(a b c d)
         (foo (bar ,@x))
