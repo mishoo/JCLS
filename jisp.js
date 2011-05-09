@@ -364,7 +364,7 @@ function read_comma(stream) {
         var sym = "UNQUOTE";
         if (stream.peek() == "@") {
                 stream.next();
-                sym = "SPLICE";
+                sym = "UNQUOTE-SPLICE";
         }
         return cons(JCLS.intern(sym), cons(read(stream), NIL));
 };
@@ -437,6 +437,18 @@ function read(stream, eof_error, eof_value) {
 function write_ast_to_string(node) {
         var ret = "";
         if (consp(node)) {
+                if (symbolp(car(node))) {
+                        switch (car(node)) {
+                            case JCLS.intern("QUASIQUOTE"):
+                                return "`" + write_ast_to_string(cadr(node));
+                            case JCLS.intern("UNQUOTE"):
+                                return "," + list_to_array(cdr(node)).map(write_ast_to_string).join(" ,");
+                            case JCLS.intern("UNQUOTE-SPLICE"):
+                                return ",@" + write_ast_to_string(cadr(node));
+                            case CL.intern("QUOTE"):
+                                return "'" + write_ast_to_string(cadr(node));
+                        }
+                }
                 while (!nullp(node)) {
                         if (ret) ret += " ";
                         ret += write_ast_to_string(car(node));
@@ -595,7 +607,7 @@ var analyze = (function(){
 
         {
                 var UNQUOTE = JCLS.intern("UNQUOTE");
-                var SPLICE = JCLS.intern("SPLICE");
+                var SPLICE = JCLS.intern("UNQUOTE-SPLICE");
                 var QUASIQUOTE = JCLS.intern("QUASIQUOTE");
                 JCLS.special("QUASIQUOTE", function(stuff){
                         stuff = car(stuff);
@@ -634,9 +646,8 @@ var analyze = (function(){
                                                 set_car(node, value);
                                         } else if (type == SPLICE) {
                                                 if (!consp(value))
-                                                        throw "SPLICE (,@) wants a list!";
+                                                        throw "UNQUOTE-SPLICE (,@) wants a list!";
                                                 if (nullp(value)) {
-                                                        // just skip this node
                                                         set_cdr(prev, cdr(node));
                                                 } else {
                                                         value = copy_list(value);

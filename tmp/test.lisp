@@ -5,7 +5,7 @@
   (defun test (x)
     `(1 ,@x ,(+ 2 3) ,@'(a b c d)
         (foo (bar ,@x))
-        (mak `(1 2 ,,@x))
+        (mak `(1 2 ,,@x ,,(+ 1 2)))
         ,@x))
   (test (list 'crap 'mak))
   )
