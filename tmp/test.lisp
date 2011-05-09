@@ -1,6 +1,8 @@
 ;; foo
 ;; bar
 
+(cdr '(1 . 2))
+
 (progn
   (defmacro dacă (co th el)
     (io:log "Macro-expanding for: " co th el)

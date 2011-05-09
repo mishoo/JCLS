@@ -307,9 +307,10 @@ function ignore_comment(stream) {
     stream.read_while(function(ch){ return ch != "\n" });
 };
 
+var DOT = CL.intern(".");
 function read_delimited_list(stream, endchar) {
     return stream.with_list(function(){
-        var list = NIL, ret = NIL;
+        var list, ret = NIL;
         while (true) {
             stream.skip_ws();
             if (stream.peek() == endchar) {
@@ -318,11 +319,12 @@ function read_delimited_list(stream, endchar) {
             } else {
                 var el = read(stream);
                 if (el != null) {
-                    var tmp = cons(el, NIL);
-                    if (!nullp(list)) {
-                        set_cdr(list, tmp);
-                    } else
-                        ret = tmp;
+                    var tmp;
+                    tmp = el === DOT
+                        ? read(stream)
+                        : cons(el, NIL);
+                    if (list) set_cdr(list, tmp);
+                    else ret = tmp;
                     list = tmp;
                 }
             }
