@@ -27,72 +27,6 @@ function HOP(obj, prop) {
     return Object.prototype.hasOwnProperty.call(obj, prop);
 };
 
-/* -----[ basics ]----- */
-
-function car(pair) { return nullp(pair) ? NIL : pair.first };
-function set_car(pair, val) { return pair.first = val };
-
-function cdr(pair) { return nullp(pair) ? NIL : pair.second };
-function set_cdr(pair, val) { return pair.second = val };
-
-function cons(first, second) { return new Pair(first, second) };
-
-function last(list) {
-    if (nullp(list)) return NIL;
-    while (!nullp(cdr(list))) list = cdr(list);
-    return list;
-};
-
-function copy_list(list) {
-    var ret = NIL, q;
-    while (!nullp(list)) {
-        var cell = cons(car(list), NIL);
-        if (q) set_cdr(q, cell);
-        else ret = cell;
-        q = cell;
-        list = cdr(list);
-    }
-    return ret;
-}
-
-function list_to_array(list) {
-    var a = [];
-    while (list !== NIL) {
-        a.push(car(list));
-        list = cdr(list);
-    }
-    return a;
-};
-
-function array_to_list(a) {
-    if (a.length == 0) return NIL;
-    return cons(a[0], array_to_list([].slice.call(a, 1)));
-};
-
-// too bad we can't afford to use recursion for some list manipulation
-// functions. :-\  without TCO we wouldn't get far.
-
-function eachlist(list, func) {
-    while (!nullp(list)) {
-        func(car(list));
-        list = cdr(list);
-    }
-    return NIL;
-};
-
-function maplist(list, func) {
-    var ret = NIL, p = NIL;
-    while (!nullp(list)) {
-        var val = func(car(list));
-        list = cdr(list);
-        var tmp = cons(val, NIL);
-        if (!nullp(p)) set_cdr(p, tmp);
-        else ret = tmp;
-        p = tmp;
-    }
-    return ret;
-};
-
 /* -----[ Symbols and packages ]----- */
 
 var _PACKAGE_;
@@ -102,11 +36,6 @@ function pushnew(a, el) {
     if (a.indexOf(el) < 0)
         a.push(el);
     return a;
-};
-
-function Pair(first, second) {
-    this.first = first;
-    this.second = second;
 };
 
 function Symbol(pack, name) {
@@ -180,7 +109,7 @@ Package.prototype = {
         return this._use_list.indexOf(name) >= 0;
     },
     defun: function(name, func) {
-        return _GLOBAL_SCOPE_.defun(this.intern(name), func);
+        return _GLOBAL_ENV_.defun(this.intern(name), func);
     },
     special: function(name, func) {
         return this.intern(name).special(func);
@@ -195,6 +124,91 @@ var CL_USER = new Package("CL-USER", {
 });
 
 _PACKAGE_ = CL_USER;
+
+/* -----[ basics ]----- */
+
+var NIL = CL.intern("NIL"); NIL.toString = function() { return "NIL" };
+var T = CL.intern("T"); T.toString = function() { return "T" };
+function nullp(arg) { return arg === NIL };
+
+function Pair(first, second) {
+    this.first = first;
+    this.second = second;
+};
+
+function car(pair) { return nullp(pair) ? NIL : pair.first };
+function set_car(pair, val) { return pair.first = val };
+
+function cdr(pair) { return nullp(pair) ? NIL : pair.second };
+function set_cdr(pair, val) { return pair.second = val };
+
+function cons(first, second) { return new Pair(first, second) };
+function consp(arg) { return arg instanceof Pair || nullp(arg) };
+
+// function car(pair) { return nullp(pair) ? NIL : pair[0] };
+// function set_car(pair, val) { return pair[0] = val };
+
+// function cdr(pair) { return nullp(pair) ? NIL : pair[1] };
+// function set_cdr(pair, val) { return pair[1] = val };
+
+// function cons(first, second) { return [ first, second ] };
+// function consp(arg) { return arg instanceof Array || nullp(arg) };
+
+function last(list) {
+    if (nullp(list)) return NIL;
+    while (!nullp(cdr(list))) list = cdr(list);
+    return list;
+};
+
+function copy_list(list) {
+    var ret = NIL, q;
+    while (!nullp(list)) {
+        var cell = cons(car(list), NIL);
+        if (q) set_cdr(q, cell);
+        else ret = cell;
+        q = cell;
+        list = cdr(list);
+    }
+    return ret;
+}
+
+function list_to_array(list) {
+    var a = [];
+    while (list !== NIL) {
+        a.push(car(list));
+        list = cdr(list);
+    }
+    return a;
+};
+
+function array_to_list(a) {
+    if (a.length == 0) return NIL;
+    return cons(a[0], array_to_list([].slice.call(a, 1)));
+};
+
+// too bad we can't afford to use recursion for some list manipulation
+// functions. :-\  without TCO we wouldn't get far.
+
+function eachlist(list, func) {
+    while (!nullp(list)) {
+        func(car(list));
+        list = cdr(list);
+    }
+    return NIL;
+};
+
+function maplist(list, func) {
+    var ret = NIL, p = NIL;
+    while (!nullp(list)) {
+        var val = func(car(list));
+        list = cdr(list);
+        var tmp = cons(val, NIL);
+        if (!nullp(p)) set_cdr(p, tmp);
+        else ret = tmp;
+        p = tmp;
+    }
+    return ret;
+};
 
 /* -----[ the reader ]----- */
 
@@ -226,14 +240,17 @@ function make_string_stream($SOURCE) {
         var prev_commas = commas;
         commas = 0;
         ++backquote;
-        try { return cont(); }
-        finally { --backquote; commas = prev_commas; }
+        var ret = cont();
+        --backquote;
+        commas = prev_commas;
+        return ret;
     };
     var list = 0;
     function with_list(cont) {
         ++list;
-        try { return cont(); }
-        finally { --list; }
+        var ret = cont();
+        --list;
+        return ret;
     };
     return {
         get line() { return $line },
@@ -479,11 +496,6 @@ function write_ast_to_string(node) {
 
 /* -----[ evaluator stuff ]----- */
 
-var NIL = CL.intern("NIL"); NIL.toString = function() { return "NIL" };
-var T = CL.intern("T"); T.toString = function() { return "T" };
-
-function nullp(arg) { return arg === NIL };
-function consp(arg) { return arg instanceof Pair || nullp(arg) };
 function symbolp(arg) { return arg instanceof Symbol };
 function numberp(arg) { return typeof arg == "number" };
 function stringp(arg) { return typeof arg == "string" };
@@ -497,14 +509,14 @@ function eq(x, y) {
 
 /* -----[ Env ]----- */
 
-function Scope(parent) {
+function Environment(parent) {
     function a(){};
     if (parent) a.prototype = parent.data;
     this.data = new a();
     this.parent = parent;
 };
 
-Scope.prototype = {
+Environment.prototype = {
     full: function(ns, name) {
         if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol"); // XXX: should be able to drop this in production code
         return ns + "___" + name;
@@ -532,12 +544,12 @@ Scope.prototype = {
         return this.force("funcs", name, value);
     },
     fork: function() {
-        return new Scope(this);
+        return new Environment(this);
     }
 };
 
 // auto-generate c[ad]+r combinations
-var _GLOBAL_SCOPE_ = new Scope();
+var _GLOBAL_ENV_ = new Environment();
 var LST = {};
 (function(n){
     var base = [ car, cdr ];
@@ -589,7 +601,8 @@ CL.defun("CONS", cons);
 CL.defun("LIST", function(){ return array_to_list(arguments) });
 
 var analyze = (function(){
-    var LAMBDA  = CL.intern("LAMBDA");
+    var LAMBDA  = CL.intern("LAMBDA")
+    , PROGN = CL.intern("PROGN");
 
     CL.defun("FUNCALL", function(){
         var list = array_to_list(arguments);
@@ -678,7 +691,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Scope(env);
+            env = new Environment(env);
             var val = values.map(function(proc){ return proc(env) });
             for (var i = 0; i < names.length; ++i) {
                 env.force("vars", names[i], val[i]);
@@ -694,7 +707,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Scope(env);
+            env = new Environment(env);
             for (var i = 0; i < names.length; ++i) {
                 env.force("vars", names[i], values[i](env));
             }
@@ -710,7 +723,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Scope(env);
+            env = new Environment(env);
             var val = values.map(function(proc){ return proc(env) });
             for (var i = 0; i < names.length; ++i) {
                 env.force("funcs", names[i], val[i]);
@@ -726,7 +739,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Scope(env);
+            env = new Environment(env);
             for (var i = 0; i < names.length; ++i) {
                 env.force("funcs", names[i], values[i](env));
             }
@@ -749,7 +762,7 @@ var analyze = (function(){
     CL.special("DEFUN", function(ast){
         var name = car(ast), func = do_lambda(cadr(ast), cddr(ast));
         return function(env) {
-            return _GLOBAL_SCOPE_.force("funcs", name, func(env));
+            return _GLOBAL_ENV_.force("funcs", name, func(env));
         };
     });
     CL.special("FUNCTION", function(ast){
@@ -764,7 +777,7 @@ var analyze = (function(){
         name.special(function(values){
             // "analyzing" a macro call means in fact calling the
             // macro function and analyze its return value instead.
-            return analyze(apply(func(_GLOBAL_SCOPE_), values));
+            return analyze(apply(func(_GLOBAL_ENV_), values));
         });
         return function(env) {
             return NIL;
@@ -779,14 +792,21 @@ var analyze = (function(){
             return itself(expr);
           default:
             if (expr._package === KEYWORD) return itself(expr);
-            else return get_var(expr);
+            else return function(env) {
+                return env.get("vars", expr);
+            };
         }
         else if (numberp(expr) || stringp(expr)) return itself(expr);
         else if (atom(tmp = car(expr))) {
-            var spec;
-            if (symbolp(tmp) && !nullp(spec = tmp.get("&SPECIAL")))
-                return spec(cdr(expr));
-            return do_application(tmp, cdr(expr));
+            if (tmp !== PROGN)
+                ++$level;
+            var run = do_application(tmp, cdr(expr));
+            if (tmp !== PROGN)
+                --$level;
+            if ($level == 0 && tmp !== PROGN) {
+                run($environment);
+            }
+            return run;
         }
         else if (caar(expr) === LAMBDA) {
             return do_inline_call(cadar(expr), cddar(expr), cdr(expr));
@@ -795,12 +815,6 @@ var analyze = (function(){
 
     function itself(el) {
         return function(){ return el };
-    };
-
-    function get_var(symbol) {
-        return function(env) {
-            return env.get("vars", symbol);
-        };
     };
 
     function do_if(condition, consequent, alternative) {
@@ -831,6 +845,10 @@ var analyze = (function(){
     };
 
     function do_application(operator, args) {
+        var spec = operator.get("&SPECIAL");
+        if (!nullp(spec)) {
+            return spec(args);  // special keyword
+        }
         args = maplist(args, analyze);
         return function(env) {
             var func = env.get("funcs", operator);
@@ -870,12 +888,18 @@ var analyze = (function(){
         }
     };
 
-    return analyze;
+    var $level = 0;
+
+    return function(ast, tl, env) {
+        $level = tl || 0;
+        $environment = env || _GLOBAL_ENV_;
+        return analyze(ast);
+    };
 
 }());
 
 function eval(ast, env) {
-    return analyze(ast)(env || _GLOBAL_SCOPE_);
+    return analyze(ast)(env || _GLOBAL_ENV_);
 };
 
 CL.defun("EVAL", eval);
@@ -957,4 +981,5 @@ CL.defun("SET-CDR", set_cdr);
 
 // Local Variables:
 // js-indent-level:4
+// espresso-indent-level:4
 // End:

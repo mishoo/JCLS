@@ -1,7 +1,17 @@
 ;; foo
 ;; bar
 
-(cdr '(1 . 2))
+(progn
+
+  (let ((y 1))
+    (defun test (x)
+      (* x x (setq y (+ y 1)))))
+
+  (defmacro foo (x)
+    (let ((x (test x)))
+      `(+ ,x (test ,x))))
+
+  (foo 5))
 
 (progn
   (defmacro dacă (co th el)
@@ -9,16 +19,15 @@
     (let ((ret `(if ,co ,th ,el)))
       (io:log "result: " ret)
       ret))
-  (eval
-   '(dacă (< 3 2)
-     (progn
-       (io:log "running THEN branch")
-       "Okay")
-     (progn
-       (io:log "running ELSE branch")
-       (dacă (> 2 1)
-             (progn (io:log "And 1") "Foo")
-             (progn (io:log "And two") "Boo"))))))
+  (dacă (< 3 2)
+        (progn
+          (io:log "running THEN branch")
+          "Okay")
+        (progn
+          (io:log "running ELSE branch")
+          (dacă (> 2 1)
+                (progn (io:log "And 1") "Foo")
+                (progn (io:log "And two") "Boo")))))
 
 (progn
   (defun test (x)
