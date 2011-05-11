@@ -691,7 +691,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Environment(env);
+            env = env.fork();
             var val = values.map(function(proc){ return proc(env) });
             for (var i = 0; i < names.length; ++i) {
                 env.force("vars", names[i], val[i]);
@@ -707,7 +707,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Environment(env);
+            env = env.fork();
             for (var i = 0; i < names.length; ++i) {
                 env.force("vars", names[i], values[i](env));
             }
@@ -723,7 +723,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Environment(env);
+            env = env.fork();
             var val = values.map(function(proc){ return proc(env) });
             for (var i = 0; i < names.length; ++i) {
                 env.force("funcs", names[i], val[i]);
@@ -739,7 +739,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Environment(env);
+            env = env.fork();
             for (var i = 0; i < names.length; ++i) {
                 env.force("funcs", names[i], values[i](env));
             }
@@ -774,14 +774,8 @@ var analyze = (function(){
 
     CL.special("DEFMACRO", function(ast){
         var name = car(ast), func = do_lambda(cadr(ast), cddr(ast));
-        name.special(function(values){
-            // "analyzing" a macro call means in fact calling the
-            // macro function and analyze its return value instead.
-            return analyze(apply(func(_GLOBAL_ENV_), values));
-        });
-        return function(env) {
-            return NIL;
-        };
+        _GLOBAL_ENV_.force("macs", name, func);
+        return itself(NIL);
     });
 
     function analyze(expr) {
@@ -798,14 +792,42 @@ var analyze = (function(){
         }
         else if (numberp(expr) || stringp(expr)) return itself(expr);
         else if (atom(tmp = car(expr))) {
-            if (tmp !== PROGN)
-                ++$level;
+
+            if (tmp !== PROGN) ++$level;
             var run = do_application(tmp, cdr(expr));
-            if (tmp !== PROGN)
-                --$level;
-            if ($level == 0 && tmp !== PROGN) {
+            if (tmp !== PROGN) --$level;
+
+            // XXX: I don't like this.
+
+            // evaluating all is a bad idea
+            // if ($level == 0 && tmp !== PROGN) {
+            //     run($environment);
+            // }
+
+            // Are we safe if we only evaluate DEFUN, DEFMACRO and LET?
+            // And return NIL?
+
+            // HELL.p!
+
+            if ($level == 0 && (tmp === CL.find_symbol("DEFUN")
+                                || tmp === CL.find_symbol("DEFMACRO")
+                                || tmp === CL.find_symbol("LET")
+                                || tmp === CL.find_symbol("LET*")
+                                || tmp === CL.find_symbol("FLET")
+                                || tmp === CL.find_symbol("LABELS")))
+            {
+                // calling run here evaluates the stuff at "compile-time".
+                // because it happens that $environment == _GLOBAL_ENV_,
+                // after compiling we'll get the defuns and defmacros right.
                 run($environment);
+
+                // by returning NIL we effectively discard these from
+                // the tree, such that at evaluation time these forms
+                // won't run a second time.  that's probably wrong in
+                // the general case. (we need eval-when)
+                return itself(NIL);
             }
+
             return run;
         }
         else if (caar(expr) === LAMBDA) {
@@ -846,9 +868,16 @@ var analyze = (function(){
 
     function do_application(operator, args) {
         var spec = operator.get("&SPECIAL");
+        // special operator?
         if (!nullp(spec)) {
-            return spec(args);  // special keyword
+            return spec(args);
         }
+        // macro?
+        var mac = $environment.get("macs", operator);
+        if (mac) {
+            return analyze(apply(mac($environment), args));
+        }
+        // otherwise function call
         args = maplist(args, analyze);
         return function(env) {
             var func = env.get("funcs", operator);
@@ -902,13 +931,17 @@ function eval(ast, env) {
     return analyze(ast)(env || _GLOBAL_ENV_);
 };
 
-CL.defun("EVAL", eval);
-
 exports.write_ast_to_string = write_ast_to_string;
 exports.read = read;
 exports.eval = eval;
 exports.make_string_stream = make_string_stream;
 exports.analyze = analyze;
+
+/* -----[ Other functions ]----- */
+
+CL.defun("EVAL", eval);
+CL.defun("RPLACA", set_car);
+CL.defun("RPLACD", set_cdr);
 
 /* -----[ Arithmetic ]----- */
 
@@ -974,10 +1007,6 @@ CL.defun(">=", function(last){
         console.log(write_ast_to_string(array_to_list(arguments)));
     });
 })(new Package("IO"));
-
-// until I figure out proper SETF..
-CL.defun("SET-CAR", set_car);
-CL.defun("SET-CDR", set_cdr);
 
 // Local Variables:
 // js-indent-level:4
