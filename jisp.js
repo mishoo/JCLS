@@ -396,7 +396,7 @@ function read_pipe(stream) {
 };
 
 function read_sharp(stream) {
-    // TBD
+    throw "TBD";
 };
 
 function read_symbol(stream, pack) {
@@ -594,7 +594,8 @@ var caar = LST.caar
 , cdddar = LST.cdddar
 , cddddr = LST.cddddr;
 
-CL.defun("ATOM", atom);
+CL.defun("ATOM", function(arg) { return atom(arg) ? T : NIL });
+CL.defun("SYMBOLP", function(arg) { return symbolp(arg) ? T : NIL });
 CL.defun("EQ", eq);
 CL.defun("CONS", cons);
 CL.defun("LIST", function(){ return array_to_list(arguments) });
@@ -917,12 +918,9 @@ var analyze = (function(){
     };
 
     var $level = 0;
+    var $environment = _GLOBAL_ENV_;
 
-    return function(ast, tl, env) {
-        $level = tl || 0;
-        $environment = env || _GLOBAL_ENV_;
-        return analyze(ast);
-    };
+    return analyze;
 
 }());
 
