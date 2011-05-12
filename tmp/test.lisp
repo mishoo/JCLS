@@ -1,27 +1,51 @@
 ;; foo
 ;; bar
 
+(progn
+  (defun remainder (a b)
+    (if (= b 0)
+        nil
+        (if (< a b)
+            a
+            (remainder (- a b) b))))
 
+  (defun gcd (a b)
+    (if (= b 0)
+        a
+        (gcd b (remainder a b))))
+
+  (jcls:print (gcd 18 12)))
+
+;; not working, can't access free variables from a macro
+(progn
+  (let ((x 1))
+    (defmacro foo ()
+      `(jcls:print ,(setq x (+ x 1)))))
+
+  (foo)
+  (foo)
+  (foo))
 
 (progn
   (defmacro dacă (co th el)
+    (jcls:print co)
     `(let ((it ,co))
        (if it ,th ,el)))
 
-  (dacă (list 1 2 3 4)
+  (dacă (list 1 2 (1+ 3) "crap" (1- 4))
         `(foo ,@it)
         '(baz))
 
   ;; (dacă (< 3 2)
   ;;       (progn
-  ;;         ;;(io:log "running THEN branch")
+  ;;         ;;(jcls:print "running THEN branch")
   ;;         "Okay")
   ;;       (progn
-  ;;         ;;(io:log "running ELSE branch")
+  ;;         ;;(jcls:print "running ELSE branch")
   ;;         (dacă (> 2 1)
-  ;;               (progn ;; (io:log "And 1")
+  ;;               (progn ;; (jcls:print "And 1")
   ;;                      "Foo")
-  ;;               (progn ;; (io:log "And two")
+  ;;               (progn ;; (jcls:print "And two")
   ;;                      "Boo"))))
   )
 
@@ -95,7 +119,7 @@
   (defun reverse (list)
     (reduce list (function cons) nil))
 
-  ;; (io:log (reverse '(1 2 3)))
+  ;; (jcls:print (reverse '(1 2 3)))
 
   (defun range (x)
     (if (> x 0)
@@ -119,10 +143,10 @@
   (let ((tmp 0))
     (defun count ()
       (setq tmp (+ tmp 1))))
-  (io:log (count))
-  (io:log (count))
-  (io:log (count))
-  (io:log (count)))
+  (jcls:print (count))
+  (jcls:print (count))
+  (jcls:print (count))
+  (jcls:print (count)))
 
 (let ((x 10))
   (setq x 20)
@@ -137,7 +161,7 @@
   (let* ((y x)
          (x (+ x x))
          (z (* x 5)))
-    (io:log (+ x y z)))
+    (jcls:print (+ x y z)))
   ;;foo
   x)
 
@@ -145,10 +169,10 @@
   (let ((tmp 0))
     (defun count ()
       (setq tmp (+ tmp 1))))
-  (io:log (count))
-  (io:log (count))
-  (io:log (count))
-  (io:log (count)))
+  (jcls:print (count))
+  (jcls:print (count))
+  (jcls:print (count))
+  (jcls:print (count)))
 
 (progn
   (defun sqr (x)
@@ -161,9 +185,9 @@
   (fact 10))
 
 (progn
-  (io:log ((lambda (f)
+  (jcls:print ((lambda (f)
              (funcall f f 10))
            (lambda (f n)
              (if (= n 1) 1
                  (* n (funcall f f (- n 1)))))))
-  (io:log "Check this out"))
+  (jcls:print "Check this out"))

@@ -392,8 +392,7 @@ function read_comma(stream) {
 };
 
 function read_pipe(stream) {
-    // TBD
-    // return [ "SYMBOL", read_escaped(stream, "|") ];
+    return _PACKAGE_.intern(read_escaped(stream, "|"));
 };
 
 function read_sharp(stream) {
@@ -489,7 +488,7 @@ function write_ast_to_string(node) {
             ret = node.fullname();
     }
     else {
-        ret = node;
+        ret = JSON.stringify(node);
     }
     return ret;
 };
@@ -500,12 +499,8 @@ function symbolp(arg) { return arg instanceof Symbol };
 function numberp(arg) { return typeof arg == "number" };
 function stringp(arg) { return typeof arg == "string" };
 function atom(x) { return symbolp(x) || numberp(x) || stringp(x) };
-
 function quote(x) { return x };
-
-function eq(x, y) {
-    return (atom(x) && atom(y) && x === y) ? T : NIL;
-};
+function eq(x, y) { return (atom(x) && atom(y) && x === y) ? T : NIL };
 
 /* -----[ Env ]----- */
 
@@ -518,7 +513,11 @@ function Environment(parent) {
 
 Environment.prototype = {
     full: function(ns, name) {
-        if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol"); // XXX: should be able to drop this in production code
+        if (!(name instanceof Symbol)) {
+            // XXX: should drop this in production code.  There's no
+            // way to get here for anything other than a Symbol.
+            throw new Error("Expecting a Symbol");
+        }
         return ns + "___" + name;
     },
     get: function(ns, name) {
@@ -961,6 +960,14 @@ CL.defun("/", function(){
     return [].slice.call(arguments, 1).reduce(function(a, b){ return a / b }, arguments[0]);
 });
 
+CL.defun("1+", function(a){
+    return a + 1;
+});
+
+CL.defun("1-", function(a){
+    return a - 1;
+});
+
 CL.defun("=", function(val){
     for (var i = 1; i < arguments.length; ++i)
         if (arguments[i] !== val) return NIL;
@@ -1001,12 +1008,10 @@ CL.defun(">=", function(last){
 
 /* -----[ temporary stuff ]----- */
 
-(function(IO){
-    IO.defun("LOG", function(){
-        //console.log([].slice.call(arguments).join(", "));
-        console.log(write_ast_to_string(array_to_list(arguments)));
-    });
-})(new Package("IO"));
+JCLS.defun("PRINT", function(){
+    //console.log([].slice.call(arguments).join(", "));
+    console.log(write_ast_to_string(array_to_list(arguments)));
+});
 
 // Local Variables:
 // js-indent-level:4
