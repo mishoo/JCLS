@@ -1,6 +1,71 @@
 ;; foo
 ;; bar
 
+
+(progn
+
+  (defun map (list proc)
+    (if list
+        (cons (funcall proc (car list))
+              (map (cdr list) proc))))
+
+  (defun foreach (list proc)
+    (if list
+        (progn
+          (funcall proc (car list))
+          (foreach (cdr list) proc))))
+
+  (defun reduce (list proc init)
+    (if list
+        (reduce (cdr list) proc (funcall proc (car list) init))
+        init))
+
+  (defun append (a b)
+    (if a
+        (cons (car a) (append (cdr a) b))
+        b))
+
+  ;; quite inefficient
+  (defun reverse (list)
+    (if list
+        (append (reverse (cdr list)) (cons (car list) nil))))
+
+  ;; this is a LOT faster
+  (defun reverse (list)
+    (let ((ret nil))
+      (foreach list (lambda (el)
+                      (setq ret (cons el ret))))
+      ret))
+
+  (defun reverse (list)
+    (reduce list (function cons) nil))
+
+  ;; (jcls:print (reverse '(1 2 3)))
+
+  (defun range (x)
+    (if (> x 0)
+        (cons x (range (- x 1)))))
+
+  ;; (reverse (range 400))
+
+  (defun sqr (x) (* x x))
+
+  (map (reverse (range 1000)) (function sqr))
+
+  ;; test comment
+
+  )
+
+
+
+
+
+
+
+
+
+
+
 (progn
   (defun remainder (a b)
     (if (= b 0)
@@ -9,12 +74,12 @@
             a
             (remainder (- a b) b))))
 
-  (defun gcd (a b)
+  (defun cmmdc (a b)
     (if (= b 0)
         a
-        (gcd b (remainder a b))))
+        (cmmdc b (remainder a b))))
 
-  (jcls:print (gcd 18 12)))
+  (cmmdc 13 16900))
 
 ;; not working, can't access free variables from a macro
 (progn

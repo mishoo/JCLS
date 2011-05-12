@@ -198,12 +198,11 @@ function eachlist(list, func) {
 };
 
 function maplist(list, func) {
-    var ret = NIL, p = NIL;
+    var ret = NIL, p;
     while (!nullp(list)) {
-        var val = func(car(list));
+        var tmp = cons(func(car(list)), NIL);
         list = cdr(list);
-        var tmp = cons(val, NIL);
-        if (!nullp(p)) set_cdr(p, tmp);
+        if (p) set_cdr(p, tmp);
         else ret = tmp;
         p = tmp;
     }
