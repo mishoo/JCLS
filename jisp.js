@@ -7,6 +7,11 @@
 
 /* -----[ utils ]----- */
 
+function curry(f) {
+    var args = [].slice.call(arguments, 1);
+    return function() { return f.apply(this, args.concat([].slice.call(arguments))); };
+};
+
 function compose(a, rest) {
     if (rest == null) return a;
     rest = compose.apply(null, [].slice.call(arguments, 1));
@@ -27,72 +32,6 @@ function HOP(obj, prop) {
     return Object.prototype.hasOwnProperty.call(obj, prop);
 };
 
-/* -----[ basics ]----- */
-
-function car(pair) { return nullp(pair) ? NIL : pair.first };
-function set_car(pair, val) { return pair.first = val };
-
-function cdr(pair) { return nullp(pair) ? NIL : pair.second };
-function set_cdr(pair, val) { return pair.second = val };
-
-function cons(first, second) { return new Pair(first, second) };
-
-function last(list) {
-    if (nullp(list)) return NIL;
-    while (!nullp(cdr(list))) list = cdr(list);
-    return list;
-};
-
-function copy_list(list) {
-    var ret = NIL, q;
-    while (!nullp(list)) {
-        var cell = cons(car(list), NIL);
-        if (q) set_cdr(q, cell);
-        else ret = cell;
-        q = cell;
-        list = cdr(list);
-    }
-    return ret;
-}
-
-function list_to_array(list) {
-    var a = [];
-    while (list !== NIL) {
-        a.push(car(list));
-        list = cdr(list);
-    }
-    return a;
-};
-
-function array_to_list(a) {
-    if (a.length == 0) return NIL;
-    return cons(a[0], array_to_list([].slice.call(a, 1)));
-};
-
-// too bad we can't afford to use recursion for some list manipulation
-// functions. :-\  without TCO we wouldn't get far.
-
-function eachlist(list, func) {
-    while (!nullp(list)) {
-        func(car(list));
-        list = cdr(list);
-    }
-    return NIL;
-};
-
-function maplist(list, func) {
-    var ret = NIL, p = NIL;
-    while (!nullp(list)) {
-        var val = func(car(list));
-        list = cdr(list);
-        var tmp = cons(val, NIL);
-        if (!nullp(p)) set_cdr(p, tmp);
-        else ret = tmp;
-        p = tmp;
-    }
-    return ret;
-};
-
 /* -----[ Symbols and packages ]----- */
 
 var _PACKAGE_;
@@ -102,11 +41,6 @@ function pushnew(a, el) {
     if (a.indexOf(el) < 0)
         a.push(el);
     return a;
-};
-
-function Pair(first, second) {
-    this.first = first;
-    this.second = second;
 };
 
 function Symbol(pack, name) {
@@ -180,7 +114,7 @@ Package.prototype = {
         return this._use_list.indexOf(name) >= 0;
     },
     defun: function(name, func) {
-        return _GLOBAL_SCOPE_.defun(this.intern(name), func);
+        return _GLOBAL_ENV_.defun(this.intern(name), func);
     },
     special: function(name, func) {
         return this.intern(name).special(func);
@@ -195,6 +129,90 @@ var CL_USER = new Package("CL-USER", {
 });
 
 _PACKAGE_ = CL_USER;
+
+/* -----[ basics ]----- */
+
+var NIL = CL.intern("NIL"); NIL.toString = function() { return "NIL" };
+var T = CL.intern("T"); T.toString = function() { return "T" };
+function nullp(arg) { return arg === NIL };
+
+function Pair(first, second) {
+    this.first = first;
+    this.second = second;
+};
+
+function car(pair) { return nullp(pair) ? NIL : pair.first };
+function set_car(pair, val) { return pair.first = val };
+
+function cdr(pair) { return nullp(pair) ? NIL : pair.second };
+function set_cdr(pair, val) { return pair.second = val };
+
+function cons(first, second) { return new Pair(first, second) };
+function consp(arg) { return arg instanceof Pair || nullp(arg) };
+
+// function car(pair) { return nullp(pair) ? NIL : pair[0] };
+// function set_car(pair, val) { return pair[0] = val };
+
+// function cdr(pair) { return nullp(pair) ? NIL : pair[1] };
+// function set_cdr(pair, val) { return pair[1] = val };
+
+// function cons(first, second) { return [ first, second ] };
+// function consp(arg) { return arg instanceof Array || nullp(arg) };
+
+function last(list) {
+    if (nullp(list)) return NIL;
+    while (!nullp(cdr(list))) list = cdr(list);
+    return list;
+};
+
+function copy_list(list) {
+    var ret = NIL, q;
+    while (!nullp(list)) {
+        var cell = cons(car(list), NIL);
+        if (q) set_cdr(q, cell);
+        else ret = cell;
+        q = cell;
+        list = cdr(list);
+    }
+    return ret;
+}
+
+function list_to_array(list) {
+    var a = [];
+    while (list !== NIL) {
+        a.push(car(list));
+        list = cdr(list);
+    }
+    return a;
+};
+
+function array_to_list(a) {
+    if (a.length == 0) return NIL;
+    return cons(a[0], array_to_list([].slice.call(a, 1)));
+};
+
+// too bad we can't afford to use recursion for some list manipulation
+// functions. :-\  without TCO we wouldn't get far.
+
+function eachlist(list, func) {
+    while (!nullp(list)) {
+        func(car(list));
+        list = cdr(list);
+    }
+    return NIL;
+};
+
+function maplist(list, func) {
+    var ret = NIL, p;
+    while (!nullp(list)) {
+        var tmp = cons(func(car(list)), NIL);
+        list = cdr(list);
+        if (p) set_cdr(p, tmp);
+        else ret = tmp;
+        p = tmp;
+    }
+    return ret;
+};
 
 /* -----[ the reader ]----- */
 
@@ -226,14 +244,17 @@ function make_string_stream($SOURCE) {
         var prev_commas = commas;
         commas = 0;
         ++backquote;
-        try { return cont(); }
-        finally { --backquote; commas = prev_commas; }
+        var ret = cont();
+        --backquote;
+        commas = prev_commas;
+        return ret;
     };
     var list = 0;
     function with_list(cont) {
         ++list;
-        try { return cont(); }
-        finally { --list; }
+        var ret = cont();
+        --list;
+        return ret;
     };
     return {
         get line() { return $line },
@@ -375,12 +396,11 @@ function read_comma(stream) {
 };
 
 function read_pipe(stream) {
-    // TBD
-    // return [ "SYMBOL", read_escaped(stream, "|") ];
+    return _PACKAGE_.intern(read_escaped(stream, "|"));
 };
 
 function read_sharp(stream) {
-    // TBD
+    throw "TBD";
 };
 
 function read_symbol(stream, pack) {
@@ -472,41 +492,37 @@ function write_ast_to_string(node) {
             ret = node.fullname();
     }
     else {
-        ret = node;
+        if (typeof node == "string") ret = JSON.stringify(node);
+        else ret = node;
     }
     return ret;
 };
 
 /* -----[ evaluator stuff ]----- */
 
-var NIL = CL.intern("NIL"); NIL.toString = function() { return "NIL" };
-var T = CL.intern("T"); T.toString = function() { return "T" };
-
-function nullp(arg) { return arg === NIL };
-function consp(arg) { return arg instanceof Pair || nullp(arg) };
 function symbolp(arg) { return arg instanceof Symbol };
 function numberp(arg) { return typeof arg == "number" };
 function stringp(arg) { return typeof arg == "string" };
 function atom(x) { return symbolp(x) || numberp(x) || stringp(x) };
-
 function quote(x) { return x };
-
-function eq(x, y) {
-    return (atom(x) && atom(y) && x === y) ? T : NIL;
-};
+function eq(x, y) { return (atom(x) && atom(y) && x === y) ? T : NIL };
 
 /* -----[ Env ]----- */
 
-function Scope(parent) {
+function Environment(parent) {
     function a(){};
     if (parent) a.prototype = parent.data;
     this.data = new a();
     this.parent = parent;
 };
 
-Scope.prototype = {
+Environment.prototype = {
     full: function(ns, name) {
-        if (!(name instanceof Symbol)) throw new Error("Expecting a Symbol"); // XXX: should be able to drop this in production code
+        if (!(name instanceof Symbol)) {
+            // XXX: should drop this in production code.  There's no
+            // way to get here for anything other than a Symbol.
+            throw new Error("Expecting a Symbol");
+        }
         return ns + "___" + name;
     },
     get: function(ns, name) {
@@ -532,12 +548,12 @@ Scope.prototype = {
         return this.force("funcs", name, value);
     },
     fork: function() {
-        return new Scope(this);
+        return new Environment(this);
     }
 };
 
 // auto-generate c[ad]+r combinations
-var _GLOBAL_SCOPE_ = new Scope();
+var _GLOBAL_ENV_ = new Environment();
 var LST = {};
 (function(n){
     var base = [ car, cdr ];
@@ -583,13 +599,15 @@ var caar = LST.caar
 , cdddar = LST.cdddar
 , cddddr = LST.cddddr;
 
-CL.defun("ATOM", atom);
+CL.defun("ATOM", function(arg) { return atom(arg) ? T : NIL });
+CL.defun("SYMBOLP", function(arg) { return symbolp(arg) ? T : NIL });
 CL.defun("EQ", eq);
 CL.defun("CONS", cons);
 CL.defun("LIST", function(){ return array_to_list(arguments) });
 
 var analyze = (function(){
-    var LAMBDA  = CL.intern("LAMBDA");
+    var LAMBDA  = CL.intern("LAMBDA")
+    , PROGN = CL.intern("PROGN");
 
     CL.defun("FUNCALL", function(){
         var list = array_to_list(arguments);
@@ -598,15 +616,17 @@ var analyze = (function(){
     });
 
     CL.defun("APPLY", function(func) {
-        var list = NIL, tmp = NIL;
-        for (var i = 1; i < arguments.length - 1; ++i) {
+        var list = NIL, p, len = arguments.length - 1, last = arguments[len];
+        if (!consp(last))
+            throw new Error("Last argument to apply must be a list");
+        for (var i = 1; i < len; ++i) {
             var cell = cons(arguments[i], NIL);
-            if (!nullp(tmp)) set_cdr(tmp, cell);
-            if (nullp(list)) list = cell;
-            tmp = cell;
+            if (p) set_cdr(p, cell);
+            else list = cell;
+            p = cell;
         }
-        if (tmp) set_cdr(tmp, arguments[arguments.length - 1]);
-        else list = arguments[arguments.length - 1];
+        if (p) set_cdr(p, last);
+        else list = last;
         return apply(func, list);
     });
 
@@ -678,7 +698,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Scope(env);
+            env = env.fork();
             var val = values.map(function(proc){ return proc(env) });
             for (var i = 0; i < names.length; ++i) {
                 env.force("vars", names[i], val[i]);
@@ -694,7 +714,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Scope(env);
+            env = env.fork();
             for (var i = 0; i < names.length; ++i) {
                 env.force("vars", names[i], values[i](env));
             }
@@ -710,7 +730,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Scope(env);
+            env = env.fork();
             var val = values.map(function(proc){ return proc(env) });
             for (var i = 0; i < names.length; ++i) {
                 env.force("funcs", names[i], val[i]);
@@ -726,7 +746,7 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = new Scope(env);
+            env = env.fork();
             for (var i = 0; i < names.length; ++i) {
                 env.force("funcs", names[i], values[i](env));
             }
@@ -749,7 +769,7 @@ var analyze = (function(){
     CL.special("DEFUN", function(ast){
         var name = car(ast), func = do_lambda(cadr(ast), cddr(ast));
         return function(env) {
-            return _GLOBAL_SCOPE_.force("funcs", name, func(env));
+            return _GLOBAL_ENV_.force("funcs", name, func(env));
         };
     });
     CL.special("FUNCTION", function(ast){
@@ -760,14 +780,21 @@ var analyze = (function(){
     });
 
     CL.special("DEFMACRO", function(ast){
-        var name = car(ast), func = do_lambda(cadr(ast), cddr(ast));
-        name.special(function(values){
-            // "analyzing" a macro call means in fact calling the
-            // macro function and analyze its return value instead.
-            return analyze(apply(func(_GLOBAL_SCOPE_), values));
-        });
+        var name = car(ast), func = do_lambda(cadr(ast), cddr(ast), true);
+        _GLOBAL_ENV_.force("macs", name, func);
+        return itself(NIL);
+    });
+    CL.special("DESTRUCTURING-BIND", function(ast){
+        var names = do_lambda_list(car(ast), true);
+        var expr = analyze(cadr(ast));
+        var body = do_sequence(cddr(ast));
         return function(env) {
-            return NIL;
+            var values = expr(env);
+            env = env.fork();
+            eachlist(names, function(arg){
+                values = arg(env, values);
+            });
+            return body(env);
         };
     });
 
@@ -779,14 +806,49 @@ var analyze = (function(){
             return itself(expr);
           default:
             if (expr._package === KEYWORD) return itself(expr);
-            else return get_var(expr);
+            else return function(env) {
+                return env.get("vars", expr);
+            };
         }
         else if (numberp(expr) || stringp(expr)) return itself(expr);
         else if (atom(tmp = car(expr))) {
-            var spec;
-            if (symbolp(tmp) && !nullp(spec = tmp.get("&SPECIAL")))
-                return spec(cdr(expr));
-            return do_application(tmp, cdr(expr));
+
+            if (tmp !== PROGN) ++$level;
+            var run = do_application(tmp, cdr(expr));
+            if (tmp !== PROGN) --$level;
+
+            // XXX: I don't like this.
+
+            // evaluating all is a bad idea
+            // if ($level == 0 && tmp !== PROGN) {
+            //     run($environment);
+            // }
+
+            // Are we safe if we only evaluate DEFUN, DEFMACRO and LET?
+            // And return NIL?
+
+            // HELL.p!
+
+            if ($level == 0 && (tmp === CL.find_symbol("DEFUN")
+                                || tmp === CL.find_symbol("DEFMACRO")
+                                || tmp === CL.find_symbol("LET")
+                                || tmp === CL.find_symbol("LET*")
+                                || tmp === CL.find_symbol("FLET")
+                                || tmp === CL.find_symbol("LABELS")))
+            {
+                // calling run here evaluates the stuff at "compile-time".
+                // because it happens that $environment == _GLOBAL_ENV_,
+                // after compiling we'll get the defuns and defmacros right.
+                run($environment);
+
+                // by returning NIL we effectively discard these from
+                // the tree, such that at evaluation time these forms
+                // won't run a second time.  that's probably wrong in
+                // the general case. (we need eval-when)
+                return itself(NIL);
+            }
+
+            return run;
         }
         else if (caar(expr) === LAMBDA) {
             return do_inline_call(cadar(expr), cddar(expr), cdr(expr));
@@ -795,12 +857,6 @@ var analyze = (function(){
 
     function itself(el) {
         return function(){ return el };
-    };
-
-    function get_var(symbol) {
-        return function(env) {
-            return env.get("vars", symbol);
-        };
     };
 
     function do_if(condition, consequent, alternative) {
@@ -814,7 +870,121 @@ var analyze = (function(){
         };
     };
 
-    function do_lambda(args, body) {
+    // LAMBDA-LIST parser
+    var do_lambda_list = (function(){
+        var $REST = CL.intern("&REST");
+        var $BODY = CL.intern("&BODY");
+        var $KEY = CL.intern("&KEY");
+        var $OPTIONAL = CL.intern("&OPTIONAL");
+
+        function find(key, list) {
+            key = key._name;
+            while (!nullp(list)) {
+                if (car(list)._name == key) {
+                    return cadr(list);
+                }
+                list = cddr(list);
+            }
+            // returns undefined on purpose if the key wasn't found
+        };
+
+        function lambda_arg_key_list(arg, env, values) {
+            var name = arg[0], def = arg[1], arg_p = arg[2];
+            var val = find(name, values);
+            env.force("vars", name, val || def(env));
+            if (!nullp(arg_p)) env.force("vars", arg_p, val ? T : NIL);
+            return values;
+        };
+
+        function lambda_arg_key(arg, env, values) {
+            env.force("vars", arg, find(arg, values) || NIL);
+            return values;
+        };
+
+        function lambda_arg_optional_list(arg, env, values) {
+            var name = arg[0], def = arg[1], arg_p = arg[2];
+            if (nullp(values)) {
+                env.force("vars", name, def(env));
+                if (!nullp(arg_p)) env.force("vars", arg_p, NIL);
+                return NIL;
+            } else {
+                env.force("vars", name, car(values));
+                if (!nullp(arg_p)) env.force("vars", arg_p, T);
+                return cdr(values);
+            }
+        };
+
+        function lambda_arg_itself(name, optional, env, values) {
+            if (nullp(values)) {
+                if (!optional) throw new Error(name + " is a required argument");
+                return env.force("vars", name, NIL);
+            } else {
+                env.force("vars", name, car(values));
+                return cdr(values);
+            }
+        };
+
+        function lambda_arg_rest(name, env, values) {
+            env.force("vars", name, values);
+            return NIL;
+        };
+
+        function lambda_arg_destruct(args, env, values) {
+            if (!consp(car(values)))
+                throw new Error("Expecting a list");
+            var list = car(values);
+            eachlist(args, function(arg) {
+                list = arg(env, list);
+            });
+            return cdr(values);
+        };
+
+        return function do_lambda_list(args, destructuring) {
+            var ret = NIL, p, optional = false, key = false;
+            function add(val) {
+                var cell = cons(val, NIL);
+                if (p) set_cdr(p, cell);
+                else ret = cell;
+                p = cell;
+            };
+            while (!nullp(args)) {
+                var arg = car(args);
+                args = cdr(args);
+                if (symbolp(arg)) switch(arg) {
+                  case $REST:
+                  case $BODY:
+                    add(curry(lambda_arg_rest, car(args)));
+                    return ret;
+                  case $OPTIONAL:
+                    optional = true; key = false;
+                    continue;
+                  case $KEY:
+                    key = true; optional = false;
+                    continue;
+                  default:
+                    if (key) add(curry(lambda_arg_key, arg));
+                    else add(curry(lambda_arg_itself, arg, optional));
+                }
+                else if (optional || key) {
+                    add(curry(key ? lambda_arg_key_list : lambda_arg_optional_list, [
+                        car(arg),
+                        analyze(cadr(arg)), // default value might be an expression
+                        caddr(arg)
+                    ]));
+                }
+                else if (destructuring) {
+                    // and here we recurse to analyze the sub-list
+                    add(curry(lambda_arg_destruct, do_lambda_list(arg, destructuring)));
+                }
+                else throw new Error("Not a destructuring lambda list");
+            }
+            return ret;
+        };
+    })();
+    // END LAMBDA-LIST parser
+
+    function do_lambda(args, body, destructuring) {
+        args = do_lambda_list(args, destructuring);
         body = do_sequence(body);
         return function(env) {
             return [ args, body, env ];
@@ -831,6 +1001,17 @@ var analyze = (function(){
     };
 
     function do_application(operator, args) {
+        var spec = operator.get("&SPECIAL");
+        // special operator?
+        if (!nullp(spec)) {
+            return spec(args);
+        }
+        // macro?
+        var mac = $environment.get("macs", operator);
+        if (mac) {
+            return analyze(apply(mac($environment), args));
+        }
+        // otherwise function call
         args = maplist(args, analyze);
         return function(env) {
             var func = env.get("funcs", operator);
@@ -843,8 +1024,9 @@ var analyze = (function(){
     };
 
     function do_inline_call(args, body, values) {
-        values = maplist(values, analyze);
+        args = do_lambda_list(args);
         body = do_sequence(body);
+        values = maplist(values, analyze);
         return function(env) {
             return apply([ args, body, env ], maplist(values, function(proc){
                 return proc(env);
@@ -857,34 +1039,39 @@ var analyze = (function(){
             return func.apply(null, list_to_array(values));
         }
         else if (func instanceof Array) {
-            var names = func[0], body = func[1], env = func[2];
-            if (!nullp(names)) {
+            var args = func[0], body = func[1], env = func[2];
+            if (!nullp(args)) {
                 env = env.fork();
-                while (!nullp(names)) {
-                    env.force("vars", car(names), car(values));
-                    names = cdr(names);
-                    values = cdr(values);
-                }
+                eachlist(args, function(arg){
+                    values = arg(env, values);
+                });
             }
             return body(env);
         }
     };
+
+    var $level = 0;
+    var $environment = _GLOBAL_ENV_;
 
     return analyze;
 
 }());
 
 function eval(ast, env) {
-    return analyze(ast)(env || _GLOBAL_SCOPE_);
+    return analyze(ast)(env || _GLOBAL_ENV_);
 };
-
-CL.defun("EVAL", eval);
 
 exports.write_ast_to_string = write_ast_to_string;
 exports.read = read;
 exports.eval = eval;
 exports.make_string_stream = make_string_stream;
 exports.analyze = analyze;
+
+/* -----[ Other functions ]----- */
+
+CL.defun("EVAL", eval);
+CL.defun("RPLACA", set_car);
+CL.defun("RPLACD", set_cdr);
 
 /* -----[ Arithmetic ]----- */
 
@@ -902,6 +1089,14 @@ CL.defun("*", function(){
 
 CL.defun("/", function(){
     return [].slice.call(arguments, 1).reduce(function(a, b){ return a / b }, arguments[0]);
+});
+
+CL.defun("1+", function(a){
+    return a + 1;
+});
+
+CL.defun("1-", function(a){
+    return a - 1;
 });
 
 CL.defun("=", function(val){
@@ -944,17 +1139,13 @@ CL.defun(">=", function(last){
 
 /* -----[ temporary stuff ]----- */
 
-(function(IO){
-    IO.defun("LOG", function(){
-        //console.log([].slice.call(arguments).join(", "));
-        console.log(write_ast_to_string(array_to_list(arguments)));
-    });
-})(new Package("IO"));
-
-// until I figure out proper SETF..
-CL.defun("SET-CAR", set_car);
-CL.defun("SET-CDR", set_cdr);
+JCLS.defun("PRINT", function(){
+    //console.log([].slice.call(arguments).join(", "));
+    console.log(write_ast_to_string(array_to_list(arguments)));
+    return NIL;
+});
 
 // Local Variables:
 // js-indent-level:4
+// espresso-indent-level:4
 // End:
