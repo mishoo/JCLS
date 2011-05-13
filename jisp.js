@@ -784,6 +784,19 @@ var analyze = (function(){
         _GLOBAL_ENV_.force("macs", name, func);
         return itself(NIL);
     });
+    CL.special("DESTRUCTURING-BIND", function(ast){
+        var names = do_lambda_list(car(ast), true);
+        var expr = analyze(cadr(ast));
+        var body = do_sequence(cddr(ast));
+        return function(env) {
+            var values = expr(env);
+            env = env.fork();
+            eachlist(names, function(arg){
+                values = arg(env, values);
+            });
+            return body(env);
+        };
+    });
 
     function analyze(expr) {
         var tmp;

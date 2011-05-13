@@ -2,6 +2,10 @@
 ;; bar
 
 (progn
+  (destructuring-bind (a (b c) &optional (d (* 2 a))) (list 1 (list 2 3))
+    (list a b c d)))
+
+(progn
   (defmacro test ((a b &key (c (+ a b))) &body body)
     (jcls:print "a is" a)
     (jcls:print "b is" b)
