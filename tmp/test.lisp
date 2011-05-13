@@ -1,6 +1,75 @@
 ;; foo
 ;; bar
 
+(progn
+  (defmacro test ((a b &key (c (+ a b))) &body body)
+    (jcls:print "a is" a)
+    (jcls:print "b is" b)
+    (jcls:print "c is" c)
+    (jcls:print "body is" body))
+
+  (test (3 4 :c 1)
+        (moo)
+        (man)))
+
+(progn
+  (defun y (func)
+    ((lambda (x) (funcall x x))
+     (lambda (y)
+       (funcall func
+                (lambda (&rest args)
+                  (apply (funcall y y) args))))))
+
+  (funcall (y (lambda (fact)
+                (lambda (n)
+                  (if (= n 1) 1
+                      (* n (funcall fact (1- n)))))))
+           10))
+
+(progn
+  (defun foo (a &key b (c (progn
+                            (jcls:print "Evaluating C's default form")
+                            (* a 2)) c-passed))
+    (jcls:print "a is:" a)
+    (jcls:print "b is:" b)
+    (jcls:print "c is:" c)
+    (jcls:print "c-passed is:" c-passed))
+
+  (foo 10))
+
+(progn
+  (defun foo (a &optional (b (progn
+                               (jcls:print "Evaluating B's default form")
+                               (+ a 5)) b-passed)
+              &rest c)
+    (jcls:print "a is:" a)
+    (jcls:print "b is:" b)
+    (jcls:print "b-passed is:" b-passed)
+    retue(jcls:print "c is:" c))
+
+  (foo 10 2 3 4 5))
+
+(progn
+  (defun y (func)
+    ((lambda (x) (funcall x x))
+     (lambda (y)
+       (funcall func
+                (lambda (&rest args)
+                  (apply (funcall y y) args))))))
+
+  (funcall (y (lambda (fact)
+                (lambda (n)
+                  (if (= n 1) 1
+                      (* n (funcall fact (1- n)))))))
+           10))
+
+
+((lambda (f)
+   (funcall f f 5))
+ (lambda (f n)
+   (if (eq n 1) 1
+       (* n (funcall f f (- n 1))))))
+
 
 (progn
 

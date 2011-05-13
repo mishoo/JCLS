@@ -7,6 +7,11 @@
 
 /* -----[ utils ]----- */
 
+function curry(f) {
+    var args = [].slice.call(arguments, 1);
+    return function() { return f.apply(this, args.concat([].slice.call(arguments))); };
+};
+
 function compose(a, rest) {
     if (rest == null) return a;
     rest = compose.apply(null, [].slice.call(arguments, 1));
@@ -487,7 +492,8 @@ function write_ast_to_string(node) {
             ret = node.fullname();
     }
     else {
-        ret = JSON.stringify(node);
+        if (typeof node == "string") ret = JSON.stringify(node);
+        else ret = node;
     }
     return ret;
 };
@@ -610,15 +616,17 @@ var analyze = (function(){
     });
 
     CL.defun("APPLY", function(func) {
-        var list = NIL, tmp = NIL;
-        for (var i = 1; i < arguments.length - 1; ++i) {
+        var list = NIL, p, len = arguments.length - 1, last = arguments[len];
+        if (!consp(last))
+            throw new Error("Last argument to apply must be a list");
+        for (var i = 1; i < len; ++i) {
             var cell = cons(arguments[i], NIL);
-            if (!nullp(tmp)) set_cdr(tmp, cell);
-            if (nullp(list)) list = cell;
-            tmp = cell;
+            if (p) set_cdr(p, cell);
+            else list = cell;
+            p = cell;
         }
-        if (tmp) set_cdr(tmp, arguments[arguments.length - 1]);
-        else list = arguments[arguments.length - 1];
+        if (p) set_cdr(p, last);
+        else list = last;
         return apply(func, list);
     });
 
@@ -772,7 +780,7 @@ var analyze = (function(){
     });
 
     CL.special("DEFMACRO", function(ast){
-        var name = car(ast), func = do_lambda(cadr(ast), cddr(ast));
+        var name = car(ast), func = do_lambda(cadr(ast), cddr(ast), true);
         _GLOBAL_ENV_.force("macs", name, func);
         return itself(NIL);
     });
@@ -849,7 +857,121 @@ var analyze = (function(){
         };
     };
 
-    function do_lambda(args, body) {
+    // LAMBDA-LIST parser
+    var do_lambda_list = (function(){
+        var $REST = CL.intern("&REST");
+        var $BODY = CL.intern("&BODY");
+        var $KEY = CL.intern("&KEY");
+        var $OPTIONAL = CL.intern("&OPTIONAL");
+
+        function find(key, list) {
+            key = key._name;
+            while (!nullp(list)) {
+                if (car(list)._name == key) {
+                    return cadr(list);
+                }
+                list = cddr(list);
+            }
+            // returns undefined on purpose if the key wasn't found
+        };
+
+        function lambda_arg_key_list(arg, env, values) {
+            var name = arg[0], def = arg[1], arg_p = arg[2];
+            var val = find(name, values);
+            env.force("vars", name, val || def(env));
+            if (!nullp(arg_p)) env.force("vars", arg_p, val ? T : NIL);
+            return values;
+        };
+
+        function lambda_arg_key(arg, env, values) {
+            env.force("vars", arg, find(arg, values) || NIL);
+            return values;
+        };
+
+        function lambda_arg_optional_list(arg, env, values) {
+            var name = arg[0], def = arg[1], arg_p = arg[2];
+            if (nullp(values)) {
+                env.force("vars", name, def(env));
+                if (!nullp(arg_p)) env.force("vars", arg_p, NIL);
+                return NIL;
+            } else {
+                env.force("vars", name, car(values));
+                if (!nullp(arg_p)) env.force("vars", arg_p, T);
+                return cdr(values);
+            }
+        };
+
+        function lambda_arg_itself(name, optional, env, values) {
+            if (nullp(values)) {
+                if (!optional) throw new Error(name + " is a required argument");
+                return env.force("vars", name, NIL);
+            } else {
+                env.force("vars", name, car(values));
+                return cdr(values);
+            }
+        };
+
+        function lambda_arg_rest(name, env, values) {
+            env.force("vars", name, values);
+            return NIL;
+        };
+
+        function lambda_arg_destruct(args, env, values) {
+            if (!consp(car(values)))
+                throw new Error("Expecting a list");
+            var list = car(values);
+            eachlist(args, function(arg) {
+                list = arg(env, list);
+            });
+            return cdr(values);
+        };
+
+        return function do_lambda_list(args, destructuring) {
+            var ret = NIL, p, optional = false, key = false;
+            function add(val) {
+                var cell = cons(val, NIL);
+                if (p) set_cdr(p, cell);
+                else ret = cell;
+                p = cell;
+            };
+            while (!nullp(args)) {
+                var arg = car(args);
+                args = cdr(args);
+                if (symbolp(arg)) switch(arg) {
+                  case $REST:
+                  case $BODY:
+                    add(curry(lambda_arg_rest, car(args)));
+                    return ret;
+                  case $OPTIONAL:
+                    optional = true; key = false;
+                    continue;
+                  case $KEY:
+                    key = true; optional = false;
+                    continue;
+                  default:
+                    if (key) add(curry(lambda_arg_key, arg));
+                    else add(curry(lambda_arg_itself, arg, optional));
+                }
+                else if (optional || key) {
+                    add(curry(key ? lambda_arg_key_list : lambda_arg_optional_list, [
+                        car(arg),
+                        analyze(cadr(arg)), // default value might be an expression
+                        caddr(arg)
+                    ]));
+                }
+                else if (destructuring) {
+                    // and here we recurse to analyze the sub-list
+                    add(curry(lambda_arg_destruct, do_lambda_list(arg, destructuring)));
+                }
+                else throw new Error("Not a destructuring lambda list");
+            }
+            return ret;
+        };
+    })();
+    // END LAMBDA-LIST parser
+
+    function do_lambda(args, body, destructuring) {
+        args = do_lambda_list(args, destructuring);
         body = do_sequence(body);
         return function(env) {
             return [ args, body, env ];
@@ -889,8 +1011,9 @@ var analyze = (function(){
     };
 
     function do_inline_call(args, body, values) {
-        values = maplist(values, analyze);
+        args = do_lambda_list(args);
         body = do_sequence(body);
+        values = maplist(values, analyze);
         return function(env) {
             return apply([ args, body, env ], maplist(values, function(proc){
                 return proc(env);
@@ -903,14 +1026,12 @@ var analyze = (function(){
             return func.apply(null, list_to_array(values));
         }
         else if (func instanceof Array) {
-            var names = func[0], body = func[1], env = func[2];
-            if (!nullp(names)) {
+            var args = func[0], body = func[1], env = func[2];
+            if (!nullp(args)) {
                 env = env.fork();
-                while (!nullp(names)) {
-                    env.force("vars", car(names), car(values));
-                    names = cdr(names);
-                    values = cdr(values);
-                }
+                eachlist(args, function(arg){
+                    values = arg(env, values);
+                });
             }
             return body(env);
         }
@@ -1008,6 +1129,7 @@ CL.defun(">=", function(last){
 JCLS.defun("PRINT", function(){
     //console.log([].slice.call(arguments).join(", "));
     console.log(write_ast_to_string(array_to_list(arguments)));
+    return NIL;
 });
 
 // Local Variables:
