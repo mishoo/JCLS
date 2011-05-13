@@ -214,6 +214,53 @@ function maplist(list, func) {
     return ret;
 };
 
+/* -----[ Env ]----- */
+
+function Environment(parent) {
+    function a(){};
+    if (parent) a.prototype = parent.data;
+    this.data = new a();
+    this.parent = parent;
+};
+
+Environment.prototype = {
+    full: function(ns, name) {
+        if (!(name instanceof Symbol)) {
+            // XXX: should drop this in production code.  There's no
+            // way to get here for anything other than a Symbol.
+            throw new Error("Expecting a Symbol");
+        }
+        return ns + "___" + name;
+    },
+    get: function(ns, name) {
+        return this.data[this.full(ns, name)];
+    },
+    get_origin: function(name) {
+        var s = this;
+        while (s) {
+            if (HOP(s.data, name)) return s;
+            s = s.parent;
+        }
+    },
+    set: function(ns, name, value) {
+        var full = this.full(ns, name);
+        var org = this.get_origin(full);
+        if (!org) throw new Error("Undeclared variable " + name);
+        return org.data[full] = value;
+    },
+    force: function(ns, name, value) {
+        return this.data[this.full(ns, name)] = value;
+    },
+    defun: function(name, value) {
+        return this.force("funcs", name, value);
+    },
+    fork: function() {
+        return new Environment(this);
+    }
+};
+
+var _GLOBAL_ENV_ = new Environment();
+
 /* -----[ the reader ]----- */
 
 function make_string_stream($SOURCE) {
@@ -507,104 +554,12 @@ function atom(x) { return symbolp(x) || numberp(x) || stringp(x) };
 function quote(x) { return x };
 function eq(x, y) { return (atom(x) && atom(y) && x === y) ? T : NIL };
 
-/* -----[ Env ]----- */
-
-function Environment(parent) {
-    function a(){};
-    if (parent) a.prototype = parent.data;
-    this.data = new a();
-    this.parent = parent;
-};
-
-Environment.prototype = {
-    full: function(ns, name) {
-        if (!(name instanceof Symbol)) {
-            // XXX: should drop this in production code.  There's no
-            // way to get here for anything other than a Symbol.
-            throw new Error("Expecting a Symbol");
-        }
-        return ns + "___" + name;
-    },
-    get: function(ns, name) {
-        return this.data[this.full(ns, name)];
-    },
-    get_origin: function(name) {
-        var s = this;
-        while (s) {
-            if (HOP(s.data, name)) return s;
-            s = s.parent;
-        }
-    },
-    set: function(ns, name, value) {
-        var full = this.full(ns, name);
-        var org = this.get_origin(full);
-        if (!org) throw new Error("Undeclared variable " + name);
-        return org.data[full] = value;
-    },
-    force: function(ns, name, value) {
-        return this.data[this.full(ns, name)] = value;
-    },
-    defun: function(name, value) {
-        return this.force("funcs", name, value);
-    },
-    fork: function() {
-        return new Environment(this);
-    }
-};
-
-// auto-generate c[ad]+r combinations
-var _GLOBAL_ENV_ = new Environment();
-var LST = {};
-(function(n){
-    var base = [ car, cdr ];
-    while (n < 4) {
-        for (var i = 0; i < (2 << n); ++i) {
-            var a = i.toString(2);
-            while (a.length < n + 1) a = "0" + a;
-            var name = "C" + a.replace(/0/g, "A").replace(/1/g, "D") + "R";
-            var func = compose.apply(null, a.split("").map(function(ch){ return base[ch] }));
-            CL.defun(name, func);
-            LST[name.toLowerCase()] = func;
-        }
-        n++;
-    }
-})(0);
-
-var caar = LST.caar
-, cadr = LST.cadr
-, cdar = LST.cdar
-, cddr = LST.cddr
-, caaar = LST.caaar
-, caadr = LST.caadr
-, cadar = LST.cadar
-, caddr = LST.caddr
-, cdaar = LST.cdaar
-, cdadr = LST.cdadr
-, cddar = LST.cddar
-, cdddr = LST.cdddr
-, caaaar = LST.caaaar
-, caaadr = LST.caaadr
-, caadar = LST.caadar
-, caaddr = LST.caaddr
-, cadaar = LST.cadaar
-, cadadr = LST.cadadr
-, caddar = LST.caddar
-, cadddr = LST.cadddr
-, cdaaar = LST.cdaaar
-, cdaadr = LST.cdaadr
-, cdadar = LST.cdadar
-, cdaddr = LST.cdaddr
-, cddaar = LST.cddaar
-, cddadr = LST.cddadr
-, cdddar = LST.cdddar
-, cddddr = LST.cddddr;
-
-CL.defun("ATOM", function(arg) { return atom(arg) ? T : NIL });
-CL.defun("SYMBOLP", function(arg) { return symbolp(arg) ? T : NIL });
-CL.defun("EQ", eq);
-CL.defun("CONS", cons);
-CL.defun("LIST", function(){ return array_to_list(arguments) });
-
+// The following got quite complicated.  Essentially, it defines a
+// function — analyze — which takes an AST and returns a function of
+// one argument (an Environment).  This function in turn evaluates the
+// expression described by AST in the given environment and returns
+// the result.  The technique is described in SICP 4.1.7.
+//
 var analyze = (function(){
     var LAMBDA  = CL.intern("LAMBDA")
     , PROGN = CL.intern("PROGN");
@@ -1069,6 +1024,58 @@ exports.analyze = analyze;
 
 /* -----[ Other functions ]----- */
 
+// auto-generate c[ad]+r combinations
+var LST = {};
+(function(n){
+    var base = [ car, cdr ];
+    while (n < 4) {
+        for (var i = 0; i < (2 << n); ++i) {
+            var a = i.toString(2);
+            while (a.length < n + 1) a = "0" + a;
+            var name = "C" + a.replace(/0/g, "A").replace(/1/g, "D") + "R";
+            var func = compose.apply(null, a.split("").map(function(ch){ return base[ch] }));
+            CL.defun(name, func);
+            LST[name.toLowerCase()] = func;
+        }
+        n++;
+    }
+})(0);
+
+var caar = LST.caar
+, cadr = LST.cadr
+, cdar = LST.cdar
+, cddr = LST.cddr
+, caaar = LST.caaar
+, caadr = LST.caadr
+, cadar = LST.cadar
+, caddr = LST.caddr
+, cdaar = LST.cdaar
+, cdadr = LST.cdadr
+, cddar = LST.cddar
+, cdddr = LST.cdddr
+, caaaar = LST.caaaar
+, caaadr = LST.caaadr
+, caadar = LST.caadar
+, caaddr = LST.caaddr
+, cadaar = LST.cadaar
+, cadadr = LST.cadadr
+, caddar = LST.caddar
+, cadddr = LST.cadddr
+, cdaaar = LST.cdaaar
+, cdaadr = LST.cdaadr
+, cdadar = LST.cdadar
+, cdaddr = LST.cdaddr
+, cddaar = LST.cddaar
+, cddadr = LST.cddadr
+, cdddar = LST.cdddar
+, cddddr = LST.cddddr;
+
+CL.defun("ATOM", function(arg) { return atom(arg) ? T : NIL });
+CL.defun("SYMBOLP", function(arg) { return symbolp(arg) ? T : NIL });
+CL.defun("EQ", eq);
+CL.defun("CONS", cons);
+CL.defun("LAST", last);
+CL.defun("LIST", function(){ return array_to_list(arguments) });
 CL.defun("EVAL", eval);
 CL.defun("RPLACA", set_car);
 CL.defun("RPLACD", set_cdr);

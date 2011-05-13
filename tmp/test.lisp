@@ -2,6 +2,19 @@
 ;; bar
 
 (progn
+  (defmacro cond (cases)
+    (if cases
+        (let ((first (car cases)))
+          `(if ,(car first)
+               (progn ,@(cdr first))
+               (cond ,(cdr cases))))))
+
+  (cond
+    (((= 1 2) "first")
+     (2 "second")
+     (t "no one"))))
+
+(progn
   (destructuring-bind (a (b c) &optional (d (* 2 a))) (list 1 (list 2 3))
     (list a b c d)))
 
