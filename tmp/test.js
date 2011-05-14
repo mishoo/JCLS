@@ -1,9 +1,9 @@
-var jisp = require("../jisp");
+var jcls = require("../jcls");
 
-var write_ast_to_string = jisp.write_ast_to_string;
-var eval = jisp.eval;
-var read = jisp.read;
-var make_string_stream = jisp.make_string_stream;
+var write_ast_to_string = jcls.write_ast_to_string;
+var eval = jcls.eval;
+var read = jcls.read;
+var make_string_stream = jcls.make_string_stream;
 
 var ast = read(
         make_string_stream(
