@@ -567,10 +567,14 @@ var analyze = (function(){
     CL.defun("FUNCALL", function(){
         var list = array_to_list(arguments);
         var func = car(list), args = cdr(list);
-        return apply(func, args);
+        if (symbolp(func))
+            func = _GLOBAL_ENV_.get("funcs", func);
+        return apply(func, args, this);
     });
 
     CL.defun("APPLY", function(func) {
+        if (symbolp(func))
+            func = _GLOBAL_ENV_.get("funcs", func);
         var list = NIL, p, len = arguments.length - 1, last = arguments[len];
         if (!consp(last))
             throw new Error("Last argument to apply must be a list");
