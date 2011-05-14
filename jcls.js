@@ -252,7 +252,7 @@ Environment.prototype = {
         return this.data[this.full(ns, name)] = value;
     },
     defun: function(name, value) {
-        return this.force("funcs", name, value);
+        return this.force("f", name, value);
     },
     fork: function() {
         return new Environment(this);
@@ -568,13 +568,13 @@ var analyze = (function(){
         var list = array_to_list(arguments);
         var func = car(list), args = cdr(list);
         if (symbolp(func))
-            func = _GLOBAL_ENV_.get("funcs", func);
+            func = _GLOBAL_ENV_.get("f", func);
         return apply(func, args, this);
     });
 
     CL.defun("APPLY", function(func) {
         if (symbolp(func))
-            func = _GLOBAL_ENV_.get("funcs", func);
+            func = _GLOBAL_ENV_.get("f", func);
         var list = NIL, p, len = arguments.length - 1, last = arguments[len];
         if (!consp(last))
             throw new Error("Last argument to apply must be a list");
@@ -660,7 +660,7 @@ var analyze = (function(){
             env = env.fork();
             var val = values.map(function(proc){ return proc(env) });
             for (var i = 0; i < names.length; ++i) {
-                env.force("vars", names[i], val[i]);
+                env.force("v", names[i], val[i]);
             }
             return body(env);
         };
@@ -675,7 +675,7 @@ var analyze = (function(){
         return function(env) {
             env = env.fork();
             for (var i = 0; i < names.length; ++i) {
-                env.force("vars", names[i], values[i](env));
+                env.force("v", names[i], values[i](env));
             }
             return body(env);
         };
@@ -692,7 +692,7 @@ var analyze = (function(){
             env = env.fork();
             var val = values.map(function(proc){ return proc(env) });
             for (var i = 0; i < names.length; ++i) {
-                env.force("funcs", names[i], val[i]);
+                env.force("f", names[i], val[i]);
             }
             return body(env);
         };
@@ -707,7 +707,7 @@ var analyze = (function(){
         return function(env) {
             env = env.fork();
             for (var i = 0; i < names.length; ++i) {
-                env.force("funcs", names[i], values[i](env));
+                env.force("f", names[i], values[i](env));
             }
             return body(env);
         };
@@ -721,26 +721,26 @@ var analyze = (function(){
         }
         return function(env) {
             for (var ret = NIL, i = 0; i < names.length; ++i)
-                env.set("vars", names[i], ret = values[i](env));
+                env.set("v", names[i], ret = values[i](env));
             return ret;
         };
     });
     CL.special("DEFUN", function(ast){
         var name = car(ast), func = do_lambda(cadr(ast), cddr(ast));
         return function(env) {
-            return _GLOBAL_ENV_.force("funcs", name, func(env));
+            return _GLOBAL_ENV_.force("f", name, func(env));
         };
     });
     CL.special("FUNCTION", function(ast){
         var name = car(ast);
         return function(env) {
-            return env.get("funcs", name);
+            return env.get("f", name);
         };
     });
 
     CL.special("DEFMACRO", function(ast){
         var name = car(ast), func = do_lambda(cadr(ast), cddr(ast), true);
-        _GLOBAL_ENV_.force("macs", name, func);
+        _GLOBAL_ENV_.force("m", name, func);
         return itself(NIL);
     });
     CL.special("DESTRUCTURING-BIND", function(ast){
@@ -766,7 +766,7 @@ var analyze = (function(){
           default:
             if (expr._package === KEYWORD) return itself(expr);
             else return function(env) {
-                return env.get("vars", expr);
+                return env.get("v", expr);
             };
         }
         else if (numberp(expr) || stringp(expr)) return itself(expr);
@@ -850,25 +850,25 @@ var analyze = (function(){
         function lambda_arg_key_list(arg, env, values) {
             var name = arg[0], def = arg[1], arg_p = arg[2];
             var val = find(name, values);
-            env.force("vars", name, val || def(env));
-            if (!nullp(arg_p)) env.force("vars", arg_p, val ? T : NIL);
+            env.force("v", name, val || def(env));
+            if (!nullp(arg_p)) env.force("v", arg_p, val ? T : NIL);
             return values;
         };
 
         function lambda_arg_key(arg, env, values) {
-            env.force("vars", arg, find(arg, values) || NIL);
+            env.force("v", arg, find(arg, values) || NIL);
             return values;
         };
 
         function lambda_arg_optional_list(arg, env, values) {
             var name = arg[0], def = arg[1], arg_p = arg[2];
             if (nullp(values)) {
-                env.force("vars", name, def(env));
-                if (!nullp(arg_p)) env.force("vars", arg_p, NIL);
+                env.force("v", name, def(env));
+                if (!nullp(arg_p)) env.force("v", arg_p, NIL);
                 return NIL;
             } else {
-                env.force("vars", name, car(values));
-                if (!nullp(arg_p)) env.force("vars", arg_p, T);
+                env.force("v", name, car(values));
+                if (!nullp(arg_p)) env.force("v", arg_p, T);
                 return cdr(values);
             }
         };
@@ -876,15 +876,15 @@ var analyze = (function(){
         function lambda_arg_itself(name, optional, env, values) {
             if (nullp(values)) {
                 if (!optional) throw new Error(name + " is a required argument");
-                return env.force("vars", name, NIL);
+                return env.force("v", name, NIL);
             } else {
-                env.force("vars", name, car(values));
+                env.force("v", name, car(values));
                 return cdr(values);
             }
         };
 
         function lambda_arg_rest(name, env, values) {
-            env.force("vars", name, values);
+            env.force("v", name, values);
             return NIL;
         };
 
@@ -966,14 +966,14 @@ var analyze = (function(){
             return spec(args);
         }
         // macro?
-        var mac = $environment.get("macs", operator);
+        var mac = $environment.get("m", operator);
         if (mac) {
             return analyze(apply(mac($environment), args));
         }
         // otherwise function call
         args = maplist(args, analyze);
         return function(env) {
-            var func = env.get("funcs", operator);
+            var func = env.get("f", operator);
             if (!func)
                 throw new Error("Undefined function: " + write_ast_to_string(operator));
             return apply(func, maplist(args, function(proc){
