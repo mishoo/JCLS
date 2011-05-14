@@ -2,6 +2,18 @@
 ;; bar
 
 (progn
+  (defmacro cond (cases)
+    (if cases
+        `(if ,(caar cases)
+             (progn ,@(cdar cases))
+             (cond ,(cdr cases)))))
+
+  (cond
+    (((= 1 2) "first")
+     (2 "second")
+     (t "no one"))))
+
+(progn
   (defvar *z* 10)
 
   (defun foo ()

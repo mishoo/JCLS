@@ -89,7 +89,10 @@ Symbol.prototype = {
         return this._bindings[0];
     },
     special_var: function(is) {
-        if (is != null) return this._special_var = is;
+        if (is != null) {
+            this._special_var = is;
+            return this;
+        };
         return this._special_var;
     }
 };
@@ -366,7 +369,7 @@ function is_whitespace(ch) {
     return HOP(WHITESPACE_CHARS, ch);
 };
 
-var _READTABLE_ = {
+var _READTABLE_ = CL.intern("*READTABLE*").special_var(true).bind({
     "(": read_standard_list,
     '"': read_string,
     "'": read_quote,
@@ -389,7 +392,7 @@ var _READTABLE_ = {
     "\x0C" : ignore,
     "\u2028": ignore,
     "\u2029": ignore
-};
+});
 
 function ignore(stream) {
     stream.next();
@@ -485,7 +488,7 @@ function read_symbol(stream, pack) {
             colon = str.length; str += stream.next();
         }
         else if (ch == "\\") { esc = true; stream.next(); }
-        else if (HOP(_READTABLE_, ch)) break;
+        else if (HOP(_READTABLE_.value(), ch)) break;
         str += stream.next();
     }
     if (/^[0-9]*\.?[0-9]+$/.test(str)) {
@@ -515,7 +518,7 @@ function read(stream, eof_error, eof_value) {
         if (eof_error) stream.error("end of input");
         return eof_value;
     }
-    var reader = _READTABLE_[ch], ret;
+    var reader = _READTABLE_.value()[ch], ret;
     if (reader) {
         stream.next();
         ret = reader(stream, ch);
