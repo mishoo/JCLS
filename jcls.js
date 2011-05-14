@@ -652,13 +652,13 @@ var analyze = (function(){
     CL.special("LET", function(ast){
         var names = [], values = [];
         eachlist(car(ast), function(def){
-            names.push(car(def));
-            values.push(analyze(cadr(def)));
+            names.push(consp(def) ? car(def) : def);
+            values.push(analyze(consp(def) ? cadr(def) : NIL));
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = env.fork();
             var val = values.map(function(proc){ return proc(env) });
+            env = env.fork();
             for (var i = 0; i < names.length; ++i) {
                 env.force("v", names[i], val[i]);
             }
@@ -668,8 +668,8 @@ var analyze = (function(){
     CL.special("LET*", function(ast){
         var names = [], values = [];
         eachlist(car(ast), function(def){
-            names.push(car(def));
-            values.push(analyze(cadr(def)));
+            names.push(consp(def) ? car(def) : def);
+            values.push(analyze(consp(def) ? cadr(def) : NIL));
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
@@ -689,8 +689,8 @@ var analyze = (function(){
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
-            env = env.fork();
             var val = values.map(function(proc){ return proc(env) });
+            env = env.fork();
             for (var i = 0; i < names.length; ++i) {
                 env.force("f", names[i], val[i]);
             }
