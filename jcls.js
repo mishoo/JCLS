@@ -48,7 +48,8 @@ function Symbol(pack, name) {
     this._name = name;
     this._fullname = this._package._name + "::" + this._name;
     this._plist = {};
-    this._isSpecialVar = false;
+    this._special_var = false;
+    this._special_op = null;
     this._bindings = [];
 };
 
@@ -70,7 +71,11 @@ Symbol.prototype = {
         return HOP(this._plist, name) ? this._plist[name] : NIL;
     },
     special_op: function(func) {
-        return this.set("&SPECIAL-OP", func);
+        if (func != null) {
+            this._special_op = func;
+            return this;
+        }
+        return this._special_op;
     },
     bind: function(val) {
         this._bindings.unshift(val);
@@ -83,9 +88,9 @@ Symbol.prototype = {
     value: function() {
         return this._bindings[0];
     },
-    dynamic_var: function(is) {
-        if (is != null) this._isSpecialVar = is;
-        return this._isSpecialVar;
+    special_var: function(is) {
+        if (is != null) return this._special_var = is;
+        return this._special_var;
     }
 };
 
@@ -675,9 +680,9 @@ var analyze = (function(){
     })(function(ast){
         var name = car(ast), value = analyze(cadr(ast));
         return function(env) {
-            if (this === CL.intern("DEFVAR") && name.dynamic_var())
+            if (this === CL.intern("DEFVAR") && name.special_var())
                 return name;
-            name.dynamic_var(true);
+            name.special_var(true);
             return name.bind(value(env));
         };
     });
@@ -695,7 +700,7 @@ var analyze = (function(){
             var specials = [];
             for (var i = 0; i < names.length; ++i) {
                 var name = names[i];
-                if (name.dynamic_var()) {
+                if (name.special_var()) {
                     name.bind(val[i]);
                     specials.push(name);
                 } else {
@@ -720,7 +725,7 @@ var analyze = (function(){
             var specials = [];
             for (var i = 0; i < names.length; ++i) {
                 var name = names[i];
-                if (name.dynamic_var()) {
+                if (name.special_var()) {
                     name.bind(values[i](env));
                     specials.push(name);
                 } else {
@@ -1013,9 +1018,9 @@ var analyze = (function(){
     };
 
     function do_application(operator, args) {
-        var spec = operator.get("&SPECIAL-OP");
+        var spec = operator.special_op();
         // special operator?
-        if (!nullp(spec)) {
+        if (spec) {
             return spec.call(operator, args);
         }
         // macro?
@@ -1205,7 +1210,7 @@ CL.defun(">=", function(last){
 
 JCLS.defun("PRINT", function(){
     //console.log([].slice.call(arguments).join(", "));
-    console.log(write_ast_to_string(array_to_list(arguments)));
+    console.log([].slice.call(arguments).map(write_ast_to_string).join(" "));
     return NIL;
 });
 
