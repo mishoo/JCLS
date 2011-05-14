@@ -770,6 +770,20 @@ var analyze = (function(){
             return body(env);
         };
     });
+    CL.special("PSETQ", function(defs){
+        var names = [], values = [];
+        while (!nullp(defs)) {
+            names.push(car(defs));
+            values.push(analyze(cadr(defs)));
+            defs = cddr(defs);
+        }
+        return function(env) {
+            var val = values.map(function(proc){ return proc(env) });
+            for (var ret = NIL, i = 0; i < names.length; ++i)
+                env.set("v", names[i], ret = val[i]);
+            return ret;
+        };
+    });
     CL.special("SETQ", function(defs){
         var names = [], values = [];
         while (!nullp(defs)) {
