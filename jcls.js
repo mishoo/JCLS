@@ -48,6 +48,8 @@ function Symbol(pack, name) {
     this._name = name;
     this._fullname = this._package._name + "::" + this._name;
     this._plist = {};
+    this._isSpecialVar = false;
+    this._bindings = [];
 };
 
 Symbol.prototype = {
@@ -67,8 +69,23 @@ Symbol.prototype = {
     get: function(name) {
         return HOP(this._plist, name) ? this._plist[name] : NIL;
     },
-    special: function(func) {
-        return this.set("&SPECIAL", func);
+    special_op: function(func) {
+        return this.set("&SPECIAL-OP", func);
+    },
+    bind: function(val) {
+        this._bindings.unshift(val);
+        return this;
+    },
+    unbind: function() {
+        this._bindings.shift();
+        return this;
+    },
+    value: function() {
+        return this._bindings[0];
+    },
+    dynamic_var: function(is) {
+        if (is != null) this._isSpecialVar = is;
+        return this._isSpecialVar;
     }
 };
 
@@ -117,7 +134,7 @@ Package.prototype = {
         return _GLOBAL_ENV_.defun(this.intern(name), func);
     },
     special: function(name, func) {
-        return this.intern(name).special(func);
+        return this.intern(name).special_op(func);
     }
 };
 
@@ -233,7 +250,9 @@ Environment.prototype = {
         return ns + "___" + name;
     },
     get: function(ns, name) {
-        return this.data[this.full(ns, name)];
+        var val = this.data[this.full(ns, name)];
+        if (val == null) val = name.value();
+        return val;
     },
     get_origin: function(name) {
         var s = this;
@@ -649,6 +668,20 @@ var analyze = (function(){
     CL.special("IF", function(ast){ return do_if(car(ast), cadr(ast), caddr(ast)) });
     CL.special("LAMBDA", function(ast){ return do_lambda(car(ast), cdr(ast)) });
     CL.special("PROGN", function(ast){ return do_sequence(ast) });
+
+    (function(dv){
+        CL.special("DEFVAR", dv);
+        CL.special("DEFPARAMETER", dv);
+    })(function(ast){
+        var name = car(ast), value = analyze(cadr(ast));
+        return function(env) {
+            if (this === CL.intern("DEFVAR") && name.dynamic_var())
+                return name;
+            name.dynamic_var(true);
+            return name.bind(value(env));
+        };
+    });
+
     CL.special("LET", function(ast){
         var names = [], values = [];
         eachlist(car(ast), function(def){
@@ -659,10 +692,20 @@ var analyze = (function(){
         return function(env) {
             var val = values.map(function(proc){ return proc(env) });
             env = env.fork();
+            var specials = [];
             for (var i = 0; i < names.length; ++i) {
-                env.force("v", names[i], val[i]);
+                var name = names[i];
+                if (name.dynamic_var()) {
+                    name.bind(val[i]);
+                    specials.push(name);
+                } else {
+                    env.force("v", names[i], val[i]);
+                }
             }
-            return body(env);
+            var ret = body(env);
+            for (i = specials.length; --i >= 0;)
+                specials[i].unbind();
+            return ret;
         };
     });
     CL.special("LET*", function(ast){
@@ -674,10 +717,20 @@ var analyze = (function(){
         var body = do_sequence(cdr(ast));
         return function(env) {
             env = env.fork();
+            var specials = [];
             for (var i = 0; i < names.length; ++i) {
-                env.force("v", names[i], values[i](env));
+                var name = names[i];
+                if (name.dynamic_var()) {
+                    name.bind(values[i](env));
+                    specials.push(name);
+                } else {
+                    env.force("v", name, values[i](env));
+                }
             }
-            return body(env);
+            var ret = body(env);
+            for (i = specials.length; --i >= 0;)
+                specials[i].unbind();
+            return ret;
         };
     });
     // these are so similar to LET/FLET it's almost boring.
@@ -960,10 +1013,10 @@ var analyze = (function(){
     };
 
     function do_application(operator, args) {
-        var spec = operator.get("&SPECIAL");
+        var spec = operator.get("&SPECIAL-OP");
         // special operator?
         if (!nullp(spec)) {
-            return spec(args);
+            return spec.call(operator, args);
         }
         // macro?
         var mac = $environment.get("m", operator);

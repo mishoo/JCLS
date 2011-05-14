@@ -2,6 +2,33 @@
 ;; bar
 
 (progn
+  (defvar *z* 10)
+
+  (defun foo ()
+    *z*)
+
+  (defun bar ()
+    (let* ((*z* 5))
+      (foo)))
+
+  (jcls:print (bar))
+  (jcls:print *z*))
+
+(progn
+  (defun y (func)
+    ((lambda (x) (funcall x x))
+     (lambda (y)
+       (funcall func
+                (lambda (&rest args)
+                  (apply (funcall y y) args))))))
+
+  (funcall (y (lambda (fact)
+                (lambda (n)
+                  (if (= n 1) 1
+                      (* n (funcall fact (1- n)))))))
+           10))
+
+(progn
   (defmacro cond (cases)
     (if cases
         (let ((first (car cases)))
