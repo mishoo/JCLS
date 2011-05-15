@@ -46,7 +46,7 @@ function pushnew(a, el) {
 function Symbol(pack, name) {
     this._package = pack;
     this._name = name;
-    this._fullname = this._package._name + "::" + this._name;
+    this._fullname = (this._package ? this._package._name + "::": "#:") + this._name;
     this._plist = {};
     this._special_var = false;
     this._special_op = null;
@@ -106,9 +106,12 @@ function Package(name, options) {
     self._name = name;
     self._symbols = {};
     self._use_list = [];
-    if (options.use) options.use.map(function(p){
-        self.use_package(p);
-    });
+    if (options.use) {
+        options.use.map(function(p){
+            self.use_package(p);
+        });
+        delete options.use;
+    }
 };
 
 Package.get = function(name) {
@@ -290,7 +293,7 @@ var _GLOBAL_ENV_ = new Environment();
 
 /* -----[ the reader ]----- */
 
-function make_string_stream($SOURCE) {
+function lisp_input_stream($SOURCE) {
     var $line = 0, $col = 0, $pos = 0;
     function rest() {
         return $SOURCE.substr($pos);
@@ -1095,10 +1098,20 @@ function eval(ast, env) {
     return analyze(ast)(env || _GLOBAL_ENV_);
 };
 
+function eval_string(input) {
+    var ret = NIL, expr, EOF = {};
+    input = lisp_input_stream(input);
+    while ((expr = read(input, false, EOF)) !== EOF) {
+        ret = eval(expr);
+    }
+    return ret;
+};
+
 exports.write_ast_to_string = write_ast_to_string;
 exports.read = read;
 exports.eval = eval;
-exports.make_string_stream = make_string_stream;
+exports.eval_string = eval_string;
+exports.lisp_input_stream = lisp_input_stream;
 exports.analyze = analyze;
 
 /* -----[ Other functions ]----- */
@@ -1158,6 +1171,11 @@ CL.defun("LIST", function(){ return array_to_list(arguments) });
 CL.defun("EVAL", eval);
 CL.defun("RPLACA", set_car);
 CL.defun("RPLACD", set_cdr);
+(function(counter){
+    CL.defun("GENSYM", function(name){
+        return new Symbol(null, (name || "G") + (++counter));
+    });
+}(0));
 
 /* -----[ Arithmetic ]----- */
 
