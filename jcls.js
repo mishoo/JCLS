@@ -524,7 +524,10 @@ function read(stream, eof_error, eof_value) {
     var reader = _READTABLE_.value()[ch], ret;
     if (reader) {
         stream.next();
-        ret = reader(stream, ch);
+        if (reader instanceof Function)
+            ret = reader(stream, ch);
+        else
+            ret = fapply(reader, cons(stream, cons(ch, NIL)));
         if (ret == null && !stream.in_list)
             // toplevel comment, advance
             ret = read(stream, eof_error, eof_value);
@@ -599,7 +602,7 @@ var analyze = (function(){
         var func = car(list), args = cdr(list);
         if (symbolp(func))
             func = _GLOBAL_ENV_.get("f", func);
-        return apply(func, args, this);
+        return fapply(func, args, this);
     });
 
     CL.defun("APPLY", function(func) {
@@ -616,7 +619,7 @@ var analyze = (function(){
         }
         if (p) set_cdr(p, last);
         else list = last;
-        return apply(func, list);
+        return fapply(func, list);
     });
 
     {
@@ -1046,7 +1049,7 @@ var analyze = (function(){
         // macro?
         var mac = $environment.get("m", operator);
         if (mac) {
-            return analyze(apply(mac($environment), args));
+            return analyze(fapply(mac($environment), args));
         }
         // otherwise function call
         args = maplist(args, analyze);
@@ -1054,7 +1057,7 @@ var analyze = (function(){
             var func = env.get("f", operator);
             if (!func)
                 throw new Error("Undefined function: " + write_ast_to_string(operator));
-            return apply(func, maplist(args, function(proc){
+            return fapply(func, maplist(args, function(proc){
                 return proc(env);
             }));
         };
@@ -1065,26 +1068,10 @@ var analyze = (function(){
         body = do_sequence(body);
         values = maplist(values, analyze);
         return function(env) {
-            return apply([ args, body, env ], maplist(values, function(proc){
+            return fapply([ args, body, env ], maplist(values, function(proc){
                 return proc(env);
             }));
         };
-    };
-
-    function apply(func, values) {
-        if (func instanceof Function) {
-            return func.apply(null, list_to_array(values));
-        }
-        else if (func instanceof Array) {
-            var args = func[0], body = func[1], env = func[2];
-            if (!nullp(args)) {
-                env = env.fork();
-                eachlist(args, function(arg){
-                    values = arg(env, values);
-                });
-            }
-            return body(env);
-        }
     };
 
     var $level = 0;
@@ -1093,6 +1080,22 @@ var analyze = (function(){
     return analyze;
 
 }());
+
+function fapply(func, values) {
+    if (func instanceof Function) {
+        return func.apply(null, list_to_array(values));
+    }
+    else if (func instanceof Array) {
+        var args = func[0], body = func[1], env = func[2];
+        if (!nullp(args)) {
+            env = env.fork();
+            eachlist(args, function(arg){
+                values = arg(env, values);
+            });
+        }
+        return body(env);
+    }
+};
 
 function eval(ast, env) {
     return analyze(ast)(env || _GLOBAL_ENV_);
@@ -1240,6 +1243,32 @@ CL.defun(">=", function(last){
     }
     return T;
 });
+
+/* -----[ To influence the reader ]----- */
+
+CL.defun("READ-DELIMITED-LIST", function(endchar, stream) {
+    return read_delimited_list(stream, endchar);
+});
+
+CL.defun("GET-MACRO-CHARACTER", function(ch, readtable){
+    if (arguments.length == 1) readtable = _READTABLE_.value();
+    return readtable[ch];
+});
+
+CL.defun("SET-MACRO-CHARACTER", function(ch, func, readtable){
+    if (arguments.length == 2) readtable = _READTABLE_.value();
+    return readtable[ch] = func;
+});
+
+CL.defun("READ", function(stream, eof_error, eof_value){
+    if (arguments.length < 2) eof_error = true;
+    if (arguments.length < 3) eof_value = NIL;
+    return read(stream, eof_error, eof_value);
+});
+
+/* -----[ Math functions ]----- */
+
+
 
 /* -----[ temporary stuff ]----- */
 
