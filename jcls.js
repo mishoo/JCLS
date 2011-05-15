@@ -716,10 +716,12 @@ var analyze = (function(){
                     env.force("v", names[i], val[i]);
                 }
             }
-            var ret = body(env);
-            for (i = specials.length; --i >= 0;)
-                specials[i].unbind();
-            return ret;
+            try {
+                return body(env);
+            } finally {
+                for (i = specials.length; --i >= 0;)
+                    specials[i].unbind();
+            }
         };
     });
     CL.special("LET*", function(ast){
@@ -741,10 +743,12 @@ var analyze = (function(){
                     env.force("v", name, values[i](env));
                 }
             }
-            var ret = body(env);
-            for (i = specials.length; --i >= 0;)
-                specials[i].unbind();
-            return ret;
+            try {
+                return body(env);
+            } finally {
+                for (i = specials.length; --i >= 0;)
+                    specials[i].unbind();
+            }
         };
     });
     // these are so similar to LET/FLET it's almost boring.
@@ -837,6 +841,57 @@ var analyze = (function(){
             return body(env);
         };
     });
+
+    (function(Catch){
+        CL.special("CATCH", function(ast){
+            var name = analyze(car(ast));
+            var body = do_sequence(cdr(ast));
+            return function(env) {
+                var symbol = name(env);
+                try {
+                    return body(env);
+                }
+                catch(ex) {
+                    if (ex instanceof Catch && ex.symbol === symbol)
+                        return ex.value;
+                    else throw ex;
+                }
+            };
+        });
+        CL.special("THROW", function(ast){
+            var tag = analyze(car(ast));
+            var val = analyze(cadr(ast));
+            return function(env) {
+                throw new Catch(tag(env), val(env));
+            };
+        });
+        CL.special("IGNORE-ERRORS", function(ast){
+            var body = do_sequence(ast);
+            return function(env) {
+                try {
+                    return body(env);
+                } catch(ex) {
+                    if (!(ex instanceof Catch))
+                        return NIL;
+                    throw ex;
+                }
+            };
+        });
+        CL.special("UNWIND-PROTECT", function(ast){
+            var expr = analyze(car(ast));
+            var body = do_sequence(cdr(ast));
+            return function(env) {
+                try {
+                    return expr(env);
+                } finally {
+                    body(env);
+                }
+            };
+        });
+    }(function(symbol, value) {
+        this.symbol = symbol;
+        this.value = value;
+    }));
 
     function analyze(expr) {
         var tmp;
@@ -1264,6 +1319,10 @@ CL.defun("READ", function(stream, eof_error, eof_value){
     if (arguments.length < 2) eof_error = true;
     if (arguments.length < 3) eof_value = NIL;
     return read(stream, eof_error, eof_value);
+});
+
+CL.defun("READ-FROM-STRING", function(string){
+    return read(lisp_input_stream(string));
 });
 
 /* -----[ Math functions ]----- */

@@ -55,5 +55,23 @@
                            (reverse (read-delimited-list "]" stream))))
 
 ;; now square brackets delimit lists in reverse order
+[[2 1 cons] jcls:print]
+(jcls:print (read-from-string "[[2 1 cons] jcls:print]"))
 
-[[2 1 list] jcls:print]
+(jcls:print (catch 'foo
+              (let ((x 10))
+                (throw 'foo 'aborted)
+                (* x x))))
+
+(jcls:print (unwind-protect
+                 (progn
+                   (jcls:print "Got here")
+                   1)
+              (jcls:print "And here too")
+              2))
+
+(defvar *test* 10)
+(catch 'foo
+  (let ((*test* 20))
+    (throw 'foo nil)))
+(jcls:print *test*)
