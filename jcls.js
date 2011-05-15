@@ -1337,6 +1337,32 @@ JCLS.defun("PRINT", function(){
     return NIL;
 });
 
+JCLS.defun("NATIVE", function(){
+    var g = global;
+    for (var i = 0; i < arguments.length; ++i)
+        g = g[arguments[i]];
+    return g;
+});
+
+JCLS.defun("CALL-NATIVE", function(path, obj, args){
+    var g = global;
+    var f;
+    if (consp(path)) {
+        while (!nullp(cdr(path))) {
+            g = g[car(path)];
+            path = cdr(path);
+        }
+        f = g[car(path)];
+    } else {
+        f = obj[path];
+    }
+    return f.apply(nullp(obj) ? g : obj, list_to_array(args));
+});
+
+JCLS.defun("TO-NATIVE", function(func){
+    return function() { return fapply(func, array_to_list(arguments)) };
+});
+
 // Local Variables:
 // js-indent-level:4
 // espresso-indent-level:4

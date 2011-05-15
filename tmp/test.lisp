@@ -75,3 +75,31 @@
   (let ((*test* 20))
     (throw 'foo nil)))
 (jcls:print *test*)
+
+;; ---------------------------------------------------------------------
+;; "native" functions/methods/data -- from the underlying JS environment
+;;
+
+(jcls:print (let ((obj (funcall (jcls:native "Array") 1 2 3)))
+              (jcls:call-native "join" obj '(", "))))
+(jcls:print (jcls:call-native '("Math" "floor") nil '(3.14)))
+
+(defmacro defnative-var (name &rest path)
+  `(defparameter ,name (jcls:native ,@path)))
+
+(defmacro defnative-func (name &rest path)
+  `(defun ,name (&rest args)
+     (jcls:call-native ',path nil args)))
+
+(defnative-var pi "Math" "PI")
+(jcls:print pi)
+
+(defnative-func random "Math" "random")
+(jcls:print (random))
+
+(defnative-func set-timeout "setTimeout")
+(defmacro with-timeout (time &body body)
+  `(set-timeout (jcls:to-native (lambda () ,@body)) ,time))
+
+(with-timeout 1000
+  (jcls:print "This is printed after 1000ms"))
