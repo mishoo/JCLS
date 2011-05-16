@@ -622,6 +622,8 @@ var analyze = (function(){
         return fapply(func, list);
     });
 
+    // XXX: nice idea, reusing the list, but it's wrong.
+    //      FIX THIS.
     {
         var UNQUOTE = JCLS.intern("UNQUOTE");
         var SPLICE = JCLS.intern("UNQUOTE-SPLICE");
@@ -1224,6 +1226,9 @@ CL.defun("ATOM", function(arg) { return atom(arg) ? T : NIL });
 CL.defun("SYMBOLP", function(arg) { return symbolp(arg) ? T : NIL });
 CL.defun("EQ", eq);
 CL.defun("CONS", cons);
+CL.defun("CONSP", function(expr){
+    return consp(expr) ? expr : NIL;
+});
 CL.defun("LAST", last);
 CL.defun("LIST", function(){ return array_to_list(arguments) });
 CL.defun("EVAL", eval);
