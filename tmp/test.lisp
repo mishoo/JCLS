@@ -1,3 +1,7 @@
+;; (jcls:print '(starting up))
+;; (jcls:print `(a b ,(+ 2 3)))
+;; (jcls:print `(,@(list 'foo 'bar) a b ,@(list 1 2 3)))
+
 (jcls:print "Entering evaluator")
 
 (flet ((q ()
@@ -70,6 +74,20 @@
 (defun reverse (list)
     (reduce list (function cons) nil))
 
+(defun length (list)
+  (labels ((rec (list len)
+             (if list
+                 (rec (cdr list) (1+ len))
+                 len)))
+    (rec list 0)))
+
+(defun nth (n list)
+  (if (= n 0)
+      (car list)
+      (nth (1- n) (cdr list))))
+
+(jcls:print (length (list 1 2 3 4)))
+
 (set-macro-character "]" (get-macro-character ")"))
 (set-macro-character "[" (lambda (stream ch)
                            (reverse (read-delimited-list "]" stream))))
@@ -116,23 +134,6 @@
 (jcls:print (member 'foo '(1 2 bar mak foo test şmen)))
 (jcls:print (member 'foo '(1 2 3)))
 
-(defmacro zcase (expr &rest cases)
-  (let ((vexpr (gensym "ZCASE")))
-    `(let ((,vexpr ,expr))
-       ,(labels ((recur (cases)
-                        (when cases
-                          (if (consp (caar cases))
-                              `(if (member ,vexpr ',(caar cases))
-                                   (progn ,@(cdar cases))
-                                   ,(recur (cdr cases)))
-                              `(if (eq ,vexpr ',(caar cases))
-                                   (progn ,@(cdar cases))
-                                   ,(recur (cdr cases)))))))
-                (recur cases)))))
-
-(jcls:print "CASE test")
-(jcls:print (zcase 'mak ((bar) 2) ((mak) 'crap) ((foo) 1)))
-
 ;; ---------------------------------------------------------------------
 ;; "native" functions/methods/data -- from the underlying JS environment
 ;;
@@ -152,6 +153,7 @@
 (jcls:print pi)
 
 (defnative-func random "Math" "random")
+(defnative-func floor "Math" "floor")
 (jcls:print (random))
 
 (defnative-func set-timeout "setTimeout")
@@ -165,16 +167,60 @@
 (defmacro with-interval (time &body body)
   `(set-interval (jcls:to-native (lambda () ,@body)) ,time))
 
-(with-timeout 1000
-  (jcls:print "This is printed after 1000ms"))
-
-(defmacro every (timeout unit &body body)
-  (with-interval (* timeout (case unit
-                              ((seconds sec s) 1000)
-                              ((milliseconds ms) 1)))))
+(with-timeout 333
+  (jcls:print "This is printed after 333ms"))
 
 (let* ((calls 10)
-       (timer (with-interval 150
+       (timer (with-interval 100
                 (if (= 0 (setq calls (1- calls)))
                     (clear-interval timer))
-                (jcls:print "From interval: " calls)))))
+                (jcls:print "From interval 1: " calls)))))
+
+;; ---------------------------------------------------------------------
+
+(defmacro case (expr &rest cases)
+  (let ((vexpr (gensym "CASE")))
+    `(let ((,vexpr ,expr))
+       ,(labels ((recur (cases)
+                        (when cases
+                          (if (listp (caar cases))
+                              `(if (member ,vexpr ',(caar cases))
+                                   (progn ,@(cdar cases))
+                                   ,(recur (cdr cases)))
+                              `(if (eq ,vexpr ',(caar cases))
+                                   (progn ,@(cdar cases))
+                                   ,(recur (cdr cases)))))))
+                (recur cases)))))
+
+(let* ((list '(bar mak 1 2 3 4 foo))
+       (el (nth (floor (* (length list) (random))) list)))
+  (jcls:print "CASE test" el)
+  (jcls:print (case el
+                (bar
+                 (jcls:print "- first case")
+                 2)
+                ((mak)
+                 (jcls:print "- second case")
+                 'crap)
+                ((1 2 3 4)
+                 (jcls:print "- third case")
+                 'foo)
+                (foo
+                 (jcls:print "- fourth case")
+                 (+ 2 2)))))
+
+(defmacro every (timeout unit &body body)
+  (let ((timer (gensym)))
+    `(let (,timer)
+       (flet ((stop () (clear-interval ,timer)))
+         (setq ,timer
+               (with-interval ,(* timeout (case unit
+                                            ((seconds sec s) 1000)
+                                            ((milliseconds ms) 1)))
+                 ,@body))))))
+
+(let ((calls 10))
+  (every 0.05 seconds
+         (if (= 0 (setq calls (1- calls)))
+             (stop))
+         (jcls:print "From interval 2: " calls)))

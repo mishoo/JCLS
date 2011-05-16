@@ -176,7 +176,8 @@ function cdr(pair) { return nullp(pair) ? NIL : pair.second };
 function set_cdr(pair, val) { return pair.second = val };
 
 function cons(first, second) { return new Pair(first, second) };
-function consp(arg) { return arg instanceof Pair || nullp(arg) };
+function consp(arg) { return arg instanceof Pair };
+function listp(arg) { return arg instanceof Pair || nullp(arg) };
 
 // function car(pair) { return nullp(pair) ? NIL : pair[0] };
 // function set_car(pair, val) { return pair[0] = val };
@@ -541,7 +542,7 @@ function read(stream, eof_error, eof_value) {
 // that's really gross for the time being, we could make it nicer.
 function write_ast_to_string(node) {
     var ret = "";
-    if (consp(node)) {
+    if (listp(node)) {
         if (symbolp(car(node))) {
             switch (car(node)) {
               case JCLS.intern("QUASIQUOTE"):
@@ -558,7 +559,7 @@ function write_ast_to_string(node) {
             if (ret) ret += " ";
             ret += write_ast_to_string(car(node));
             node = cdr(node);
-            if (!consp(node)) {
+            if (!listp(node)) {
                 ret += " . " + write_ast_to_string(node);
                 break;
             }
@@ -609,7 +610,7 @@ var analyze = (function(){
         if (symbolp(func))
             func = _GLOBAL_ENV_.get("f", func);
         var list = NIL, p, len = arguments.length - 1, last = arguments[len];
-        if (!consp(last))
+        if (!listp(last))
             throw new Error("Last argument to apply must be a list");
         for (var i = 1; i < len; ++i) {
             var cell = cons(arguments[i], NIL);
@@ -622,26 +623,28 @@ var analyze = (function(){
         return fapply(func, list);
     });
 
-    // XXX: nice idea, reusing the list, but it's wrong.
-    //      FIX THIS.
-    {
-        var UNQUOTE = JCLS.intern("UNQUOTE");
-        var SPLICE = JCLS.intern("UNQUOTE-SPLICE");
-        var QUASIQUOTE = JCLS.intern("QUASIQUOTE");
+    (function(UNQUOTE, SPLICE, QUASIQUOTE){
+        function Splice(list) { this.list = list };
+        function cons_splice(a, b) {
+            if (a instanceof Splice) {
+                a = copy_list(a.list);
+                set_cdr(last(a), b);
+                return a;
+            }
+            return cons(a, b);
+        };
         JCLS.special("QUASIQUOTE", function(stuff){
             stuff = car(stuff);
             if (!consp(stuff)) return itself(stuff);
-            var hot = [], nest = 0;
+            var nest = 0;
             (function walk(node){
-                var prev = NIL;
                 while (!nullp(node)) {
-                    if (consp(car(node))) {
-                        var tag = caar(node);
-                        switch (tag) {
+                    if (listp(car(node))) {
+                        switch (caar(node)) {
                           case UNQUOTE:
                           case SPLICE:
                             if (nest == 0) {
-                                hot.push([ tag, analyze(cadar(node)), node, prev ]);
+                                set_car(cdr(car(node)), analyze(cadar(node)));
                             } else {
                                 --nest; walk(car(node)); ++nest;
                             }
@@ -653,32 +656,26 @@ var analyze = (function(){
                             walk(car(node));
                         }
                     }
-                    prev = node;
                     node = cdr(node);
                 }
             }(stuff));
             return function(env) {
-                for (var i = 0; i < hot.length; ++i) {
-                    var spot = hot[i];
-                    var type = spot[0], value = spot[1](env), node = spot[2], prev = spot[3];
-                    if (type == UNQUOTE) {
-                        set_car(node, value);
-                    } else if (type == SPLICE) {
-                        if (!consp(value))
-                            throw "UNQUOTE-SPLICE (,@) wants a list!";
-                        if (nullp(value)) {
-                            set_cdr(prev, cdr(node));
-                        } else {
-                            value = copy_list(value);
-                            set_cdr(last(value), cdr(node));
-                            set_cdr(prev, value);
+                return (function walk(node){
+                    if (consp(node)) {
+                        switch (car(node)) {
+                          case UNQUOTE: return cadr(node)(env);
+                          case SPLICE: return new Splice(cadr(node)(env));
                         }
+                        return cons_splice(walk(car(node)), walk(cdr(node)));
+                    } else {
+                        return node;
                     }
-                }
-                return stuff;
+                })(stuff);
             };
         });
-    }
+    }(JCLS.intern("UNQUOTE"),
+      JCLS.intern("UNQUOTE-SPLICE"),
+      JCLS.intern("QUASIQUOTE")));
 
     CL.special("QUOTE", function(ast){ return itself(car(ast)) });
     CL.special("IF", function(ast){ return do_if(car(ast), cadr(ast), caddr(ast)) });
@@ -701,8 +698,8 @@ var analyze = (function(){
     CL.special("LET", function(ast){
         var names = [], values = [];
         eachlist(car(ast), function(def){
-            names.push(consp(def) ? car(def) : def);
-            values.push(analyze(consp(def) ? cadr(def) : NIL));
+            names.push(listp(def) ? car(def) : def);
+            values.push(analyze(listp(def) ? cadr(def) : NIL));
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
@@ -729,8 +726,8 @@ var analyze = (function(){
     CL.special("LET*", function(ast){
         var names = [], values = [];
         eachlist(car(ast), function(def){
-            names.push(consp(def) ? car(def) : def);
-            values.push(analyze(consp(def) ? cadr(def) : NIL));
+            names.push(listp(def) ? car(def) : def);
+            values.push(analyze(listp(def) ? cadr(def) : NIL));
         });
         var body = do_sequence(cdr(ast));
         return function(env) {
@@ -1027,7 +1024,7 @@ var analyze = (function(){
         };
 
         function lambda_arg_destruct(args, env, values) {
-            if (!consp(car(values)))
+            if (!listp(car(values)))
                 throw new Error("Expecting a list");
             var list = car(values);
             eachlist(args, function(arg) {
@@ -1226,8 +1223,8 @@ CL.defun("ATOM", function(arg) { return atom(arg) ? T : NIL });
 CL.defun("SYMBOLP", function(arg) { return symbolp(arg) ? T : NIL });
 CL.defun("EQ", eq);
 CL.defun("CONS", cons);
-CL.defun("CONSP", function(expr){
-    return consp(expr) ? expr : NIL;
+CL.defun("LISTP", function(expr){
+    return listp(expr) ? expr : NIL;
 });
 CL.defun("LAST", last);
 CL.defun("LIST", function(){ return array_to_list(arguments) });
@@ -1352,7 +1349,7 @@ JCLS.defun("NATIVE", function(){
 JCLS.defun("CALL-NATIVE", function(path, obj, args){
     var g = global;
     var f;
-    if (consp(path)) {
+    if (listp(path)) {
         while (!nullp(cdr(path))) {
             g = g[car(path)];
             path = cdr(path);
