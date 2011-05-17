@@ -1,8 +1,18 @@
-;; (jcls:print '(starting up))
-;; (jcls:print `(a b ,(+ 2 3)))
-;; (jcls:print `(,@(list 'foo 'bar) a b ,@(list 1 2 3)))
-
 (jcls:print "Entering evaluator")
+
+(let* ((a '(1 2 3 4))
+       (b '(1 2 3 4))
+       (c `(,@a foo ,@a bar ,.b baz)))
+  (jcls:print c)
+  (jcls:print b)
+  (jcls:print a))
+
+(let ((a '(1 2)))
+  (jcls:print `(,.a ,@a))
+  (jcls:print a)
+  ;; but the following makes a cycle and our print function loops forever
+  ;; (jcls:print `(,.a ,.a))
+  )
 
 (flet ((q ()
          `(1 2 3)))

@@ -470,6 +470,10 @@ function read_comma(stream) {
         stream.next();
         sym = "UNQUOTE-SPLICE";
     }
+    else if (stream.peek() == ".") {
+        stream.next();
+        sym = "UNQUOTE-NSPLICE";
+    }
     return cons(JCLS.intern(sym), cons(read(stream), NIL));
 };
 
@@ -623,11 +627,14 @@ var analyze = (function(){
         return fapply(func, list);
     });
 
-    (function(UNQUOTE, SPLICE, QUASIQUOTE){
-        function Splice(list) { this.list = list };
+    (function(UNQUOTE, SPLICE, NSPLICE, QUASIQUOTE){
+        function Splice(list, destructive) {
+            this.list = list;
+            this.destructive = destructive;
+        };
         function cons_splice(a, b) {
             if (a instanceof Splice) {
-                a = copy_list(a.list);
+                a = a.destructive ? a.list : copy_list(a.list);
                 set_cdr(last(a), b);
                 return a;
             }
@@ -643,6 +650,7 @@ var analyze = (function(){
                         switch (caar(node)) {
                           case UNQUOTE:
                           case SPLICE:
+                          case NSPLICE:
                             if (nest == 0) {
                                 set_car(cdr(car(node)), analyze(cadar(node)));
                             } else {
@@ -664,7 +672,8 @@ var analyze = (function(){
                     if (consp(node)) {
                         switch (car(node)) {
                           case UNQUOTE: return cadr(node)(env);
-                          case SPLICE: return new Splice(cadr(node)(env));
+                          case SPLICE: return new Splice(cadr(node)(env), false);
+                          case NSPLICE: return new Splice(cadr(node)(env), true);
                         }
                         return cons_splice(walk(car(node)), walk(cdr(node)));
                     } else {
@@ -675,6 +684,7 @@ var analyze = (function(){
         });
     }(JCLS.intern("UNQUOTE"),
       JCLS.intern("UNQUOTE-SPLICE"),
+      JCLS.intern("UNQUOTE-NSPLICE"),
       JCLS.intern("QUASIQUOTE")));
 
     CL.special("QUOTE", function(ast){ return itself(car(ast)) });
