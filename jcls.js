@@ -724,7 +724,10 @@ var analyze = (function(){
     CL.special("QUOTE", function(ast){ return itself(car(ast)) });
     CL.special("IF", function(ast){ return do_if(car(ast), cadr(ast), caddr(ast)) });
     CL.special("LAMBDA", function(ast){ return do_lambda(car(ast), cdr(ast)) });
-    CL.special("PROGN", function(ast){ return do_sequence(ast) });
+    CL.special("PROGN", function(ast){
+        if (nullp(cdr(ast))) return analyze(car(ast));
+        else return do_sequence(ast);
+    });
 
     (function(dv){
         CL.special("DEFVAR", dv);
