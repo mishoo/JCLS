@@ -126,14 +126,24 @@
 
 (defmacro and (&rest exprs)
   (if exprs
-      `(when ,(car exprs)
-         (and ,@(cdr exprs)))
+      (let ((ex (gensym "AND")))
+        `(let ((,ex ,(car exprs)))
+           (when ,ex
+             ,(if (cdr exprs) `(and ,@(cdr exprs)) ex))))
       t))
+
+(jcls:print "AND: " (and 1 2 3 4))
+(jcls:print "AND: " (and 1 2 nil 4))
+(jcls:print "AND: " (and 4))
+(jcls:print "AND: " (and))
 
 (defmacro or (&rest exprs)
   (when exprs
-    `(unless ,(car exprs)
-       (or ,@(cdr exprs)))))
+    (let ((ex (gensym "OR")))
+      `(let ((,ex ,(car exprs)))
+         (if ,ex ,ex (or ,@(cdr exprs)))))))
+
+(jcls:print "OR: " (or 1 2 3 4))
 
 (defun member (item list)
   (if list
@@ -197,12 +207,18 @@
                               `(if (member ,vexpr ',(caar cases))
                                    (progn ,@(cdar cases))
                                    ,(recur (cdr cases)))
-                              `(if (eq ,vexpr ',(caar cases))
-                                   (progn ,@(cdar cases))
-                                   ,(recur (cdr cases)))))))
-                (recur cases)))))
+                              (if (and (not (cdr cases))
+                                       (or (eq (caar cases) 'otherwise)
+                                           (eq (caar cases) t)))
+                                  `(progn ,@(cdar cases))
+                                  `(if (eq ,vexpr ',(caar cases))
+                                       (progn ,@(cdar cases))
+                                       ,(recur (cdr cases))))))))
+                (let ((ret (recur cases)))
+                  (jcls:print ret)
+                  ret)))))
 
-(let* ((list '(bar mak 1 2 3 4 foo))
+(let* ((list '(bar mak 1 2 3 4 foo else))
        (el (nth (floor (* (length list) (random))) list)))
   (jcls:print "CASE test" el)
   (jcls:print (case el
@@ -217,7 +233,8 @@
                  'foo)
                 (foo
                  (jcls:print "- fourth case")
-                 (+ 2 2)))))
+                 (+ 2 2))
+                (otherwise "None of the above"))))
 
 (defmacro every (timeout unit &body body)
   (let ((timer (gensym)))
