@@ -85,6 +85,9 @@ Symbol.prototype = {
         this._bindings.shift();
         return this;
     },
+    setq: function(val) {
+        return this._bindings[0] = val;
+    },
     value: function() {
         return this._bindings[0];
     },
@@ -97,6 +100,11 @@ Symbol.prototype = {
     }
 };
 
+function as_name(thing) {
+    if (thing instanceof Symbol) return thing.name();
+    return thing;
+}
+
 function Package(name, options) {
     var self = this;
     options = defaults(options, {
@@ -105,6 +113,7 @@ function Package(name, options) {
     _ALL_PACKAGES_[name.toUpperCase()] = self;
     self._name = name;
     self._symbols = {};
+    self._exported = {};
     self._use_list = [];
     if (options.use) {
         options.use.map(function(p){
@@ -115,25 +124,38 @@ function Package(name, options) {
 };
 
 Package.get = function(name) {
+    if (name instanceof Package) return name;
     return _ALL_PACKAGES_[name.toUpperCase()];
 };
 
 Package.prototype = {
-    find_symbol: function(name) {
-        if (HOP(this._symbols, name))
-            return this._symbols[name];
-        for (var i = 0; i < this._use_list.length; ++i) {
-            var sym = this._use_list[i].find_symbol(name);
+    find_symbol: function(name, exp) {
+        if (exp) {
+            if (HOP(this._exported, name))
+                return this._exported[name];
+        } else {
+            if (HOP(this._symbols, name))
+                return this._symbols[name];
+        }
+        for (var i = this._use_list.length; --i >= 0;) {
+            var sym = this._use_list[i].find_symbol(name, true);
             if (sym != null) return sym;
         }
     },
     intern: function(name) {
-        return this.find_symbol(name) ||
-            (this._symbols[name] = new Symbol(this, name));
+        return this._symbols[name] || (
+            this._symbols[name] = new Symbol(this, name)
+        );
     },
-    discard_symbol: function(name) {
-        if (name instanceof Symbol) name = name._name;
-        delete this._symbols[name];
+    find_or_intern: function(name) {
+        var sym = this.find_symbol(name);
+        return sym || this.intern(name);
+    },
+    impsym: function(symbol) {
+        return this._symbols[symbol._name] = symbol;
+    },
+    expsym: function(name) {
+        return this._exported[name] = this.find_or_intern(name);
     },
     use_package: function(name) {
         pushnew(this._use_list, Package.get(name));
@@ -141,11 +163,21 @@ Package.prototype = {
     uses: function(name) {
         return this._use_list.indexOf(name) >= 0;
     },
-    defun: function(name, func) {
+    defun_: function(name, func) {
         return _GLOBAL_ENV_.defun(this.intern(name), func);
     },
-    special: function(name, func) {
+    defun: function(name, func) {
+        var ret = this.defun_(name, func);
+        this.expsym(name);
+        return ret;
+    },
+    special_: function(name, func) {
         return this.intern(name).special_op(func);
+    },
+    special: function(name, func) {
+        var ret = this.special_(name, func);
+        this.expsym(name);
+        return ret;
     }
 };
 
@@ -156,12 +188,12 @@ var CL_USER = new Package("CL-USER", {
     use: [ "CL" ]
 });
 
-_PACKAGE_ = CL_USER;
+_PACKAGE_ = CL.expsym("*PACKAGE*").special_var(true).bind(CL_USER);
 
 /* -----[ basics ]----- */
 
-var NIL = CL.intern("NIL"); NIL.toString = function() { return "NIL" };
-var T = CL.intern("T"); T.toString = function() { return "T" };
+var NIL = CL.expsym("NIL"); NIL.toString = function() { return "NIL" };
+var T = CL.expsym("T"); T.toString = function() { return "T" };
 function nullp(arg) { return arg === NIL };
 
 function Pair(first, second) {
@@ -274,6 +306,7 @@ Environment.prototype = {
         }
     },
     set: function(ns, name, value) {
+        if (name.special_var()) return name.setq(value);
         var full = this.full(ns, name);
         var org = this.get_origin(full);
         if (!org) throw new Error("Undeclared variable " + name);
@@ -373,7 +406,7 @@ function is_whitespace(ch) {
     return HOP(WHITESPACE_CHARS, ch);
 };
 
-var _READTABLE_ = CL.intern("*READTABLE*").special_var(true).bind({
+var _READTABLE_ = CL.expsym("*READTABLE*").special_var(true).bind({
     "(": read_standard_list,
     '"': read_string,
     "'": read_quote,
@@ -406,7 +439,7 @@ function ignore_comment(stream) {
     stream.read_while(function(ch){ return ch != "\n" });
 };
 
-var DOT = CL.intern(".");
+var DOT = CL.expsym(".");   // XXX: this is a gross hack.
 function read_delimited_list(stream, endchar) {
     return stream.with_list(function(){
         var list, ret = NIL;
@@ -452,7 +485,7 @@ function read_string(stream) {
 };
 
 function read_quote(stream) {
-    return cons(CL.intern("QUOTE"), cons(read(stream), NIL));
+    return cons(CL.expsym("QUOTE"), cons(read(stream), NIL));
 };
 
 function read_backquote(stream) {
@@ -478,7 +511,7 @@ function read_comma(stream) {
 };
 
 function read_pipe(stream) {
-    return _PACKAGE_.intern(read_escaped(stream, "|"));
+    return _PACKAGE_.value().find_or_intern(read_escaped(stream, "|"));
 };
 
 function read_sharp(stream) {
@@ -503,7 +536,7 @@ function read_symbol(stream, pack) {
         return parseFloat(str);
     }
     str = str.toUpperCase();
-    if (pack == null) pack = _PACKAGE_;
+    if (pack == null) pack = _PACKAGE_.value();
     var n = str;
     if (colon) {
         var p = str.substr(0, colon);
@@ -511,7 +544,7 @@ function read_symbol(stream, pack) {
         pack = Package.get(p);
         if (!pack) stream.error("no package " + p);
     }
-    return pack.intern(n);
+    return pack.find_or_intern(n);
 };
 
 function read_keyword(stream) {
@@ -571,7 +604,7 @@ function write_ast_to_string(node) {
         ret = "(" + ret + ")";
     }
     else if (symbolp(node)) {
-        if (_PACKAGE_.find_symbol(node.name()))
+        if (_PACKAGE_.value().find_symbol(node.name()))
             ret = node.name();
         else
             ret = node.fullname();
@@ -599,8 +632,9 @@ function eq(x, y) { return (atom(x) && atom(y) && x === y) ? T : NIL };
 // the result.  The technique is described in SICP 4.1.7.
 //
 var analyze = (function(){
-    var LAMBDA  = CL.intern("LAMBDA")
-    , PROGN = CL.intern("PROGN");
+    var LAMBDA  = CL.expsym("LAMBDA")
+    , PROGN = CL.expsym("PROGN")
+    , DEFVAR = CL.expsym("DEFVAR");
 
     CL.defun("FUNCALL", function(){
         var list = array_to_list(arguments);
@@ -698,7 +732,7 @@ var analyze = (function(){
     })(function(ast){
         var name = car(ast), value = analyze(cadr(ast));
         return function(env) {
-            if (this === CL.intern("DEFVAR") && name.special_var())
+            if (this === DEFVAR && name.special_var())
                 return name;
             name.special_var(true);
             return name.bind(value(env));
@@ -976,10 +1010,10 @@ var analyze = (function(){
 
     // LAMBDA-LIST parser
     var do_lambda_list = (function(){
-        var $REST = CL.intern("&REST");
-        var $BODY = CL.intern("&BODY");
-        var $KEY = CL.intern("&KEY");
-        var $OPTIONAL = CL.intern("&OPTIONAL");
+        var $REST = CL.expsym("&REST");
+        var $BODY = CL.expsym("&BODY");
+        var $KEY = CL.expsym("&KEY");
+        var $OPTIONAL = CL.expsym("&OPTIONAL");
 
         function find(key, list) {
             key = key._name;
@@ -1342,6 +1376,16 @@ CL.defun("READ-FROM-STRING", function(string){
 
 
 /* -----[ temporary stuff ]----- */
+
+JCLS.defun("MAKE-PACKAGE", function(name, use){
+    var opts = {};
+    if (use) opts.use = list_to_array(use).map(as_name);
+    return new Package(as_name(name), opts);
+});
+
+JCLS.defun("FIND-PACKAGE", function(name){
+    return Package.get(as_name(name));
+});
 
 JCLS.defun("PRINT", function(){
     //console.log([].slice.call(arguments).join(", "));
