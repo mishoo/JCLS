@@ -191,8 +191,8 @@ var _PACKAGE_ = CL.expsym("*PACKAGE*").special_var(true).bind(CL_USER);
 
 /* -----[ basics ]----- */
 
-var NIL = CL.expsym("NIL"); NIL.toString = function() { return "NIL" };
-var T = CL.expsym("T"); T.toString = function() { return "T" };
+var NIL = CL.expsym("NIL"); NIL.toString = itself("NIL")();
+var T = CL.expsym("T"); T.toString = itself("T")();
 function nullp(arg) { return arg === NIL };
 
 function Pair(first, second) {
@@ -998,10 +998,6 @@ var analyze = (function(){
         }
     };
 
-    function itself(el) {
-        return function(){ return el };
-    };
-
     function do_if(condition, consequent, alternative) {
         condition = analyze(condition);
         consequent = analyze(consequent);
@@ -1184,6 +1180,10 @@ var analyze = (function(){
     return analyze;
 
 }());
+
+function itself(el) {
+    return function(){ return el };
+};
 
 function fapply(func, values) {
     if (func instanceof Function) {

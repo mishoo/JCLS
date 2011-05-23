@@ -15,8 +15,10 @@
   )
 
 (flet ((q ()
-         `(1 2 3)))
-  (jcls:print (eq (q) (q))))
+         '(1 2 3)))
+  (jcls:print (if (eq (q) (q))
+                  "ok (constant literals are identical)"
+                  "not quite ok (constant literals consed multiple times)")))
 
 (let ((x 0))
   (defun counter ()
@@ -254,6 +256,6 @@
 
 (let ((calls 10))
   (every 0.05 seconds
+         (jcls:print "From interval 2: " calls)
          (if (= 0 (setq calls (1- calls)))
-             (stop))
-         (jcls:print "From interval 2: " calls)))
+             (stop))))
