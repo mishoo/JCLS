@@ -34,7 +34,6 @@ function HOP(obj, prop) {
 
 /* -----[ Symbols and packages ]----- */
 
-var _PACKAGE_;
 var _ALL_PACKAGES_ = {};
 
 function pushnew(a, el) {
@@ -188,7 +187,7 @@ var CL_USER = new Package("CL-USER", {
     use: [ "CL" ]
 });
 
-_PACKAGE_ = CL.expsym("*PACKAGE*").special_var(true).bind(CL_USER);
+var _PACKAGE_ = CL.expsym("*PACKAGE*").special_var(true).bind(CL_USER);
 
 /* -----[ basics ]----- */
 
@@ -887,6 +886,9 @@ var analyze = (function(){
             return body(env);
         };
     });
+    CL.defun("MACRO-FUNCTION", function(name, env){
+        return (nullp(env) ? _GLOBAL_ENV_ : env).get("m", name);
+    });
 
     (function(Catch){
         CL.special("CATCH", function(ast){
@@ -1128,6 +1130,7 @@ var analyze = (function(){
         args = do_lambda_list(args, destructuring);
         body = do_sequence(body);
         return function(env) {
+            if (nullp(env)) env = _GLOBAL_ENV_;
             return [ args, body, env ];
         };
     };

@@ -214,9 +214,7 @@
                                   `(if (eq ,vexpr ',(caar cases))
                                        (progn ,@(cdar cases))
                                        ,(recur (cdr cases))))))))
-                (let ((ret (recur cases)))
-                  (jcls:print ret)
-                  ret)))))
+                (recur cases)))))
 
 (let* ((list '(bar mak 1 2 3 4 foo else))
        (el (nth (floor (* (length list) (random))) list)))
@@ -235,6 +233,14 @@
                  (jcls:print "- fourth case")
                  (+ 2 2))
                 (otherwise "None of the above"))))
+
+(defun macroexpand-1 (form &optional env)
+  (if (symbolp (car form))
+      (progn
+        (let ((func (macro-function (car form) env)))
+          (apply (funcall func env) (cdr form))))))
+
+(jcls:print (macroexpand-1 '(or 1 2 3 4)))
 
 (defmacro every (timeout unit &body body)
   (let ((timer (gensym)))
