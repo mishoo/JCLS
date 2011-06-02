@@ -518,7 +518,7 @@ function read_sharp(stream) {
 };
 
 function read_symbol(stream, pack) {
-    var esc = false, colon = null, str = "";
+    var esc = false, colon = null, internal = false, str = "";
     while (true) {
         var ch = stream.peek();
         if (esc) { str += stream.next(); esc = false; }
@@ -526,6 +526,10 @@ function read_symbol(stream, pack) {
             if (colon != null || pack === KEYWORD)
                 stream.error("too many colons");
             colon = str.length; str += stream.next();
+            if (stream.peek() == ":") {
+                internal = true;
+                stream.next();
+            }
         }
         else if (ch == "\\") { esc = true; stream.next(); }
         else if (HOP(_READTABLE_.value(), ch)) break;
@@ -537,13 +541,19 @@ function read_symbol(stream, pack) {
     str = str.toUpperCase();
     if (pack == null) pack = _PACKAGE_.value();
     var n = str;
+    var sym;
     if (colon) {
         var p = str.substr(0, colon);
         n = str.substr(colon + 1);
         pack = Package.get(p);
-        if (!pack) stream.error("no package " + p);
+        if (!pack) stream.error("No package " + p);
+        sym = pack._symbols[n];
+        if (!sym) stream.error("Symbol " + n + " not found in package " + pack._name);
+        if (!internal && !pack._exported[n]) stream.error("Symbol " + n + " not external in package " + pack._name);
+    } else {
+        sym = pack.find_or_intern(n);
     }
-    return pack.find_or_intern(n);
+    return sym;
 };
 
 function read_keyword(stream) {
