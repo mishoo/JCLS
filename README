@@ -1,0 +1,39 @@
+                    JCLS: Java-Common-Lisp-Script
+                         (c) Mihai Bazon 2011
+                     http://mihai.bazon.net/blog
+
+----------------------------------------------------------------------
+
+        Any sufficiently complicated C or Fortran program contains an
+        ad hoc, informally-specified, bug-ridden, slow implementation
+        of half of Common Lisp.
+
+                                             Greenspun's Tenth Rule
+
+----------------------------------------------------------------------
+
+This is a toy Lisp interpreter in JavaScript.  It follows the wisdom
+brought to us by prophets in SICP 4:1:7 to implement an analyze
+function that breaks the Lisp program into JavaScript closures.  It's
+probably not usable for real programming, as the interpreter is
+recursive and could blow the stack quite easily.
+
+Current features:
+
+- basic Lisp stuff: CONS, LIST, C[AD]+R, QUOTE, IF, LAMBDA etc.
+- CL-style packages (supports private symbols, etc.)
+- lexical and dynamic variables
+- FLET, LABELS, DEFUN, DEFMACRO, MACROEXPAND-1
+- CL-style lambda lists (&key, &optional, &body, DESTRUCTURING-BIND)
+- the quasiquote operator
+- CATCH, THROW, IGNORE-ERRORS, UNWIND-PROTECT
+- the ability to influence the reader (SET-MACRO-CHARACTER)
+
+It's not remotely close to half of Common Lisp, as you can see, but
+maybe we can get closer.  I'm planning to change the analyze function
+to continuation-passing style (as in SICP 4:3:3) and use a trampoline
+instead of doing tail calls, which should (if the resulting
+interpreter won't be unbearably slow) make it useful for real-world
+problems.
+
+----------------------------------------------------------------------
