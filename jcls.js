@@ -104,10 +104,16 @@ function as_name(thing) {
     return thing;
 }
 
+function as_list(thing) {
+    if (listp(thing)) return thing;
+    return cons(thing, NIL);
+}
+
 function Package(name, options) {
     var self = this;
     options = defaults(options, {
-        use: null
+        use: null,
+        nicknames: null
     });
     _ALL_PACKAGES_[name.toUpperCase()] = self;
     self._name = name;
@@ -119,6 +125,11 @@ function Package(name, options) {
             self.use_package(p);
         });
         delete options.use;
+    }
+    if (options.nicknames) {
+        options.nicknames.map(function(nick){
+            _ALL_PACKAGES_[nick] = self;
+        });
     }
 };
 
@@ -180,7 +191,7 @@ Package.prototype = {
     }
 };
 
-var CL = new Package("CL");
+var CL = new Package("COMMON-LISP", { nicknames: [ "CL" ] });
 var JCLS = new Package("JCLS");
 var KEYWORD = new Package("KEYWORD");
 var CL_USER = new Package("CL-USER", {
@@ -1361,41 +1372,30 @@ CL.defun(">=", function(last){
     return T;
 });
 
-/* -----[ To influence the reader ]----- */
+/* -----[ utilities on which we'll build further functions in :CL ]----- */
 
-CL.defun("READ-DELIMITED-LIST", function(endchar, stream) {
-    return read_delimited_list(stream, endchar);
+JCLS.defun("IMPORT", function(syms, pack){
+    if (pack == null) pack = _PACKAGE_.value();
+    maplist(as_list(syms), function(s){
+        // XXX-E: errors should be signaled
+        pack.impsym(s);
+    });
+    return T;
 });
 
-CL.defun("GET-MACRO-CHARACTER", function(ch, readtable){
-    if (arguments.length == 1) readtable = _READTABLE_.value();
-    return readtable[ch];
+JCLS.defun("EXPORT", function(syms, pack){
+    if (pack == null) pack = _PACKAGE_.value();
+    maplist(as_list(syms), function(s){
+        // XXX-E: errors should be signaled
+        pack.expsym(s.name());
+    });
+    return T;
 });
 
-CL.defun("SET-MACRO-CHARACTER", function(ch, func, readtable){
-    if (arguments.length == 2) readtable = _READTABLE_.value();
-    return readtable[ch] = func;
-});
-
-CL.defun("READ", function(stream, eof_error, eof_value){
-    if (arguments.length < 2) eof_error = true;
-    if (arguments.length < 3) eof_value = NIL;
-    return read(stream, eof_error, eof_value);
-});
-
-CL.defun("READ-FROM-STRING", function(string){
-    return read(lisp_input_stream(string));
-});
-
-/* -----[ Math functions ]----- */
-
-
-
-/* -----[ temporary stuff ]----- */
-
-JCLS.defun("MAKE-PACKAGE", function(name, use){
+JCLS.defun("MAKE-PACKAGE", function(name, use, nicknames){
     var opts = {};
     if (use) opts.use = list_to_array(use).map(as_name);
+    if (nicknames) opts.nicknames = list_to_array(nicknames).map(as_name);
     return new Package(as_name(name), opts);
 });
 
@@ -1433,6 +1433,32 @@ JCLS.defun("CALL-NATIVE", function(path, obj, args){
 
 JCLS.defun("TO-NATIVE", function(func){
     return function() { return fapply(func, array_to_list(arguments)) };
+});
+
+//* Reader utils
+
+JCLS.defun("READ-DELIMITED-LIST", function(endchar, stream) {
+    return read_delimited_list(stream, endchar);
+});
+
+JCLS.defun("GET-MACRO-CHARACTER", function(ch, readtable){
+    if (arguments.length == 1) readtable = _READTABLE_.value();
+    return readtable[ch];
+});
+
+JCLS.defun("SET-MACRO-CHARACTER", function(ch, func, readtable){
+    if (arguments.length == 2) readtable = _READTABLE_.value();
+    return readtable[ch] = func;
+});
+
+JCLS.defun("READ", function(stream, eof_error, eof_value){
+    if (arguments.length < 2) eof_error = true;
+    if (arguments.length < 3) eof_value = NIL;
+    return read(stream, eof_error, eof_value);
+});
+
+JCLS.defun("READ-FROM-STRING", function(string){
+    return read(lisp_input_stream(string));
 });
 
 // Local Variables:

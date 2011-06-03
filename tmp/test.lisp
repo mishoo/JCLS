@@ -100,13 +100,13 @@
 
 (jcls:print (length (list 1 2 3 4)))
 
-(set-macro-character "]" (get-macro-character ")"))
-(set-macro-character "[" (lambda (stream ch)
-                           (reverse (read-delimited-list "]" stream))))
+(jcls:set-macro-character "]" (jcls:get-macro-character ")"))
+(jcls:set-macro-character "[" (lambda (stream ch)
+                                (reverse (jcls:read-delimited-list "]" stream))))
 
 ;; now square brackets delimit lists in reverse order
 [[2 1 cons] jcls:print]
-(jcls:print (read-from-string "[[2 1 cons] jcls:print]"))
+(jcls:print (jcls:read-from-string "[[2 1 cons] jcls:print]"))
 
 (jcls:print (catch 'foo
               (let ((x 10))
