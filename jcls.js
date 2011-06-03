@@ -656,31 +656,6 @@ var analyze = (function(){
     , PROGN = CL.expsym("PROGN")
     , DEFVAR = CL.expsym("DEFVAR");
 
-    CL.defun("FUNCALL", function(){
-        var list = array_to_list(arguments);
-        var func = car(list), args = cdr(list);
-        if (symbolp(func))
-            func = _GLOBAL_ENV_.get("f", func);
-        return fapply(func, args);
-    });
-
-    CL.defun("APPLY", function(func) {
-        if (symbolp(func))
-            func = _GLOBAL_ENV_.get("f", func);
-        var list = NIL, p, len = arguments.length - 1, last = arguments[len];
-        if (!listp(last))
-            throw new Error("Last argument to apply must be a list");
-        for (var i = 1; i < len; ++i) {
-            var cell = cons(arguments[i], NIL);
-            if (p) set_cdr(p, cell);
-            else list = cell;
-            p = cell;
-        }
-        if (p) set_cdr(p, last);
-        else list = last;
-        return fapply(func, list);
-    });
-
     (function(UNQUOTE, SPLICE, NSPLICE, QUASIQUOTE){
         function Splice(list, destructive) {
             this.list = list;
@@ -906,9 +881,6 @@ var analyze = (function(){
             });
             return body(env);
         };
-    });
-    CL.defun("MACRO-FUNCTION", function(name, env){
-        return (nullp(env) ? _GLOBAL_ENV_ : env).get("m", name);
     });
 
     (function(Catch){
@@ -1307,6 +1279,35 @@ CL.defun("RPLACD", set_cdr);
         return new Symbol(null, (name || "G") + (++counter));
     });
 }(0));
+
+CL.defun("FUNCALL", function(){
+    var list = array_to_list(arguments);
+    var func = car(list), args = cdr(list);
+    if (symbolp(func))
+        func = _GLOBAL_ENV_.get("f", func);
+    return fapply(func, args);
+});
+
+CL.defun("APPLY", function(func) {
+    if (symbolp(func))
+        func = _GLOBAL_ENV_.get("f", func);
+    var list = NIL, p, len = arguments.length - 1, last = arguments[len];
+    if (!listp(last))
+        throw new Error("Last argument to apply must be a list");
+    for (var i = 1; i < len; ++i) {
+        var cell = cons(arguments[i], NIL);
+        if (p) set_cdr(p, cell);
+        else list = cell;
+        p = cell;
+    }
+    if (p) set_cdr(p, last);
+    else list = last;
+    return fapply(func, list);
+});
+
+CL.defun("MACRO-FUNCTION", function(name, env){
+    return (nullp(env) ? _GLOBAL_ENV_ : env).get("m", name) || NIL;
+});
 
 /* -----[ Arithmetic ]----- */
 
