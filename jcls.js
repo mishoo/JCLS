@@ -661,7 +661,7 @@ var analyze = (function(){
         var func = car(list), args = cdr(list);
         if (symbolp(func))
             func = _GLOBAL_ENV_.get("f", func);
-        return fapply(func, args, this);
+        return fapply(func, args);
     });
 
     CL.defun("APPLY", function(func) {
@@ -1401,6 +1401,14 @@ JCLS.defun("MAKE-PACKAGE", function(name, use, nicknames){
 
 JCLS.defun("FIND-PACKAGE", function(name){
     return Package.get(as_name(name));
+});
+
+JCLS.defun("USE-PACKAGE", function(names, pack){
+    if (pack == null) pack = _PACKAGE_.value();
+    maplist(as_list(names), function(name){
+        pack.use_package(as_name(name));
+    });
+    return T;
 });
 
 JCLS.defun("PRINT", function(){
