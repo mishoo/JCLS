@@ -12,9 +12,9 @@
 ;;   'b
 ;;   'c)
 
-;; ((lambda (a &optional (b (* 2 a)) &key (c (/ b 2)))
-;;    (* a b c))
-;;  )
+((lambda (a &optional (b (* 2 a)) &key (c (/ b 2)))
+   (funcall (function *) a b c))
+ 2 3 :c 4)
 
-(defun foo (a b)
-  (+ a b))
+;; (defun foo (a b)
+;;   (+ a b))
