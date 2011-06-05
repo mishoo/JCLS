@@ -202,8 +202,8 @@ var _PACKAGE_ = CL.expsym("*PACKAGE*").special_var(true).bind(CL_USER);
 
 /* -----[ basics ]----- */
 
-var NIL = CL.expsym("NIL"); NIL.toString = itself("NIL")();
-var T = CL.expsym("T"); T.toString = itself("T")();
+var NIL = CL.expsym("NIL"); NIL.toString = function(){ return "NIL" };
+var T = CL.expsym("T"); T.toString = function(){ return "T" };
 function nullp(arg) { return arg === NIL };
 
 function Pair(first, second) {
@@ -645,6 +645,17 @@ function atom(x) { return symbolp(x) || numberp(x) || stringp(x) };
 function quote(x) { return x };
 function eq(x, y) { return (atom(x) && atom(y) && x === y) ? T : NIL };
 
+function NextCont(cont) { this.cont = cont };
+function NEXT() { return new NextCont(curry.apply(null, arguments)) };
+function NEXT2(cont, args) { return new NextCont(curry.apply(null, [ cont ].concat(args))) };
+function trampoline_apply(f, args) {
+    while (true) {
+        f = f.apply(null, args);
+        if (f instanceof NextCont) f = f.cont;
+        else return f;
+    }
+};
+
 // The following got quite complicated.  Essentially, it defines a
 // function — analyze — which takes an AST and returns a function of
 // one argument (an Environment).  This function in turn evaluates the
@@ -942,8 +953,8 @@ var analyze = (function(){
             return itself(expr);
           default:
             if (expr._package === KEYWORD) return itself(expr);
-            else return function(env) {
-                return env.get("v", expr);
+            else return function(env, succeed, fail) {
+                return NEXT(succeed, env.get("v", expr), fail);
             };
         }
         else if (numberp(expr) || stringp(expr)) return itself(expr);
@@ -975,7 +986,7 @@ var analyze = (function(){
                 // calling run here evaluates the stuff at "compile-time".
                 // because it happens that $environment == _GLOBAL_ENV_,
                 // after compiling we'll get the defuns and defmacros right.
-                run($environment);
+                run($environment, function(){}, function(){});
 
                 // by returning NIL we effectively discard these from
                 // the tree, such that at evaluation time these forms
@@ -991,14 +1002,27 @@ var analyze = (function(){
         }
     };
 
+    function itself(el) {
+        return function(env, succeed, fail){ return succeed(el, fail) };
+    };
+
     function do_if(condition, consequent, alternative) {
         condition = analyze(condition);
         consequent = analyze(consequent);
         alternative = analyze(alternative);
-        return function(env) {
-            return nullp(condition(env))
-                ? alternative(env)
-                : consequent(env);
+        return function(env, succeed, fail) {
+            return NEXT(
+                condition,
+                env,
+                function(val, fail2) {
+                    if (nullp(val)) {
+                        return NEXT(alternative, env, succeed, fail2);
+                    } else {
+                        return NEXT(consequent, env, succeed, fail2);
+                    }
+                },
+                fail
+            );
         };
     };
 
@@ -1020,55 +1044,62 @@ var analyze = (function(){
             // returns undefined on purpose if the key wasn't found
         };
 
-        function lambda_arg_key_list(arg, env, values) {
+        function lambda_arg_key_list(arg, env, values, succeed, fail) {
             var name = arg[0], def = arg[1], arg_p = arg[2];
             var val = find(name, values);
-            env.force("v", name, val || def(env));
-            if (!nullp(arg_p)) env.force("v", arg_p, val ? T : NIL);
-            return values;
+            if (val) {
+                env.force("v", name, val);
+                if (!nullp(arg_p)) env.force("v", arg_p, T);
+                return NEXT(succeed, values, fail);
+            } else {
+                return NEXT(def, env, function(val, fail2) {
+                    env.force("v", name, val);
+                    if (!nullp(arg_p)) env.force("v", arg_p, NIL);
+                    return NEXT(succeed, values, fail2);
+                }, fail);
+            }
         };
 
-        function lambda_arg_key(arg, env, values) {
+        function lambda_arg_key(arg, env, values, succeed, fail) {
             env.force("v", arg, find(arg, values) || NIL);
-            return values;
+            return NEXT(succeed, values, fail);
         };
 
-        function lambda_arg_optional_list(arg, env, values) {
+        function lambda_arg_optional_list(arg, env, values, succeed, fail) {
             var name = arg[0], def = arg[1], arg_p = arg[2];
             if (nullp(values)) {
-                env.force("v", name, def(env));
-                if (!nullp(arg_p)) env.force("v", arg_p, NIL);
-                return NIL;
+                return NEXT(def, env, function(val, fail2){
+                    env.force("v", name, val);
+                    if (!nullp(arg_p)) env.force("v", arg_p, NIL);
+                    return NEXT(succeed, NIL, fail2);
+                }, fail);
             } else {
                 env.force("v", name, car(values));
                 if (!nullp(arg_p)) env.force("v", arg_p, T);
-                return cdr(values);
+                return NEXT(succeed, cdr(values), fail);
             }
         };
 
-        function lambda_arg_itself(name, optional, env, values) {
+        function lambda_arg_itself(name, optional, env, values, succeed, fail) {
             if (nullp(values)) {
                 if (!optional) throw new Error(name + " is a required argument");
-                return env.force("v", name, NIL);
+                env.force("v", name, NIL);
+                return NEXT(succeed, NIL, fail);
             } else {
                 env.force("v", name, car(values));
-                return cdr(values);
+                return NEXT(succeed, cdr(values), fail);
             }
         };
 
-        function lambda_arg_rest(name, env, values) {
+        function lambda_arg_rest(name, env, values, succeed, fail) {
             env.force("v", name, values);
-            return NIL;
+            return NEXT(succeed, NIL, fail);
         };
 
-        function lambda_arg_destruct(args, env, values) {
+        function lambda_arg_destruct(args, env, values, succeed, fail) {
             if (!listp(car(values)))
                 throw new Error("Expecting a list");
-            var list = car(values);
-            eachlist(args, function(arg) {
-                list = arg(env, list);
-            });
-            return cdr(values);
+            return inject_lambda_args(args, env, values, succeed, fail);
         };
 
         return function do_lambda_list(args, destructuring) {
@@ -1118,19 +1149,31 @@ var analyze = (function(){
     function do_lambda(args, body, destructuring) {
         args = do_lambda_list(args, destructuring);
         body = do_sequence(body);
-        return function(env) {
+        return function(env, succeed, fail) {
             if (nullp(env)) env = _GLOBAL_ENV_;
-            return [ args, body, env ];
+            return succeed([ args, body, env ], fail);
         };
     };
 
     function do_sequence(list) {
         list = maplist(list, analyze);
-        return function(env) {
-            var val = NIL;
-            eachlist(list, function(proc){ val = proc(env) });
-            return val;
+        return function(env, succeed, fail) {
+            return NEXT(function goon(ret, fail2){
+                if (nullp(list)) return NEXT(succeed, ret, fail2);
+                var expr = car(list);
+                list = cdr(list);
+                return NEXT(expr, env, goon, fail2);
+            }, NIL);
         };
+    };
+
+    function get_args(aprocs, env, succeed, fail) {
+        if (nullp(aprocs)) return NEXT(succeed, NIL, fail);
+        return NEXT(car(aprocs), env, function(arg, fail2) {
+            return NEXT(get_args, cdr(aprocs), env, function(args, fail3) {
+                return NEXT(succeed, cons(arg, args), fail3);
+            }, fail2);
+        }, fail);
     };
 
     function do_application(operator, args) {
@@ -1146,13 +1189,13 @@ var analyze = (function(){
         }
         // otherwise function call
         args = maplist(args, analyze);
-        return function(env) {
+        return function(env, succeed, fail) {
             var func = env.get("f", operator);
             if (!func)
                 throw new Error("Undefined function: " + write_ast_to_string(operator));
-            return fapply(func, maplist(args, function(proc){
-                return proc(env);
-            }));
+            return NEXT(get_args, args, env, function(args, fail2){
+                return NEXT(fapply, func, args, succeed, fail2);
+            }, fail);
         };
     };
 
@@ -1160,10 +1203,10 @@ var analyze = (function(){
         args = do_lambda_list(args);
         body = do_sequence(body);
         values = maplist(values, analyze);
-        return function(env) {
-            return fapply([ args, body, env ], maplist(values, function(proc){
-                return proc(env);
-            }));
+        return function(env, succeed, fail){
+            return NEXT(get_args, values, env, function(values, fail2){
+                return NEXT(fapply, [ args, body, env ], values, succeed, fail);
+            }, fail);
         };
     };
 
@@ -1174,37 +1217,43 @@ var analyze = (function(){
 
 }());
 
-function itself(el) {
-    return function(){ return el };
+function inject_lambda_args(aprocs, env, values, succeed, fail) {
+    if (nullp(aprocs)) return NEXT(succeed, NIL, fail);
+    return NEXT(car(aprocs), env, values, function(next_values, fail2){
+        return NEXT(inject_lambda_args, cdr(aprocs), env, next_values, function(results, fail3){
+            return succeed(T, fail3);
+        }, fail2);
+    }, fail);
 };
 
-function fapply(func, values) {
+function fapply(func, values, succeed, fail) {
     if (func instanceof Function) {
-        return func.apply(null, list_to_array(values));
+        return NEXT(succeed, func.apply({
+            fail: fail
+        }, list_to_array(values)), fail);
     }
     else if (func instanceof Array) {
         var args = func[0], body = func[1], env = func[2];
-        if (!nullp(args)) {
-            env = env.fork();
-            eachlist(args, function(arg){
-                values = arg(env, values);
-            });
-        }
-        return body(env);
+        return inject_lambda_args(args, env, values, curry(NEXT, body, env, succeed, fail), fail);
     }
 };
 
-function eval(ast, env) {
-    return analyze(ast)(env || _GLOBAL_ENV_);
+function eval(ast, env, succeed, fail) {
+    return trampoline_apply(analyze(ast), [
+        env || _GLOBAL_ENV_,
+        succeed,
+        fail
+    ]);
 };
 
-function eval_string(input) {
-    var ret = NIL, expr, EOF = {};
+function eval_string(input, succeed, fail) {
+    var EOF = {};
     input = lisp_input_stream(input);
-    while ((expr = read(input, false, EOF)) !== EOF) {
-        ret = eval(expr);
-    }
-    return ret;
+    trampoline_apply(function goon(ret, fail) {
+        var expr = read(input, false, EOF);
+        if (expr === EOF) succeed(ret, fail);
+        else eval(expr, null, goon, fail);
+    }, [ NIL, fail ]);
 };
 
 exports.write_ast_to_string = write_ast_to_string;
