@@ -707,19 +707,27 @@ var analyze = (function(){
                     node = cdr(node);
                 }
             }(stuff));
-            return function(env) {
-                return (function walk(node){
+            return function(env, succeed, fail) {
+                return trampoline_apply(function walk(node, succeed, fail){
                     if (consp(node)) {
                         switch (car(node)) {
-                          case UNQUOTE: return cadr(node)(env);
-                          case SPLICE: return new Splice(cadr(node)(env), false);
-                          case NSPLICE: return new Splice(cadr(node)(env), true);
+                          case UNQUOTE: return NEXT(cadr(node), env, succeed, fail);
+                          case SPLICE: return NEXT(cadr(node), env, function(val, fail2){
+                              return NEXT(succeed, new Splice(val, false), fail2);
+                          }, fail);
+                          case NSPLICE: return NEXT(cadr(node), env, function(val, fail2){
+                              return NEXT(succeed, new Splice(val, true), fail2);
+                          }, fail);
                         }
-                        return cons_splice(walk(car(node)), walk(cdr(node)));
+                        return NEXT(walk, car(node), function(first, fail2){
+                            return NEXT(walk, cdr(node), function(rest, fail3){
+                                return NEXT(succeed, cons_splice(first, rest), fail3);
+                            }, fail2);
+                        }, fail);
                     } else {
-                        return node;
+                        return NEXT(succeed, node, fail);
                     }
-                })(stuff);
+                }, [ stuff, succeed, fail ]);
             };
         });
     }(JCLS.intern("UNQUOTE"),

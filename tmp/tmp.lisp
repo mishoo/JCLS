@@ -12,9 +12,11 @@
 ;;   'b
 ;;   'c)
 
-((lambda (a &optional (b (* 2 a)) &key (c (/ b 2)))
-   (funcall (function *) a b c))
- 2 3 :c 4)
+;; ((lambda (a &optional (b (* 2 a)) &key (c (/ b 2)))
+;;    (funcall (function *) a b c))
+;;  2 3 :c 4)
 
 ;; (defun foo (a b)
 ;;   (+ a b))
+
+(jcls:print `(+ 2 3 ,(+ 1 2 3 4 5 6) ,@(list 'a 'b 'c)))
