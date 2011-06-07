@@ -19,4 +19,5 @@
 ;; (defun foo (a b)
 ;;   (+ a b))
 
-(jcls:print `(+ 2 3 ,(+ 1 2 3 4 5 6) ,@(list 'a 'b 'c)))
+(jcls:print `(+ 2 3 ,(funcall (function +) 1 2 3 4 5 6) ,@(list 'a 'b 'c)))
+(jcls:print (apply (function +) (list 1 2 3 4)))

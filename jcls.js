@@ -176,10 +176,15 @@ Package.prototype = {
     defun_: function(name, func) {
         return _GLOBAL_ENV_.defun(this.intern(name), func);
     },
-    defun: function(name, func) {
+    defun2: function(name, func) {
         var ret = this.defun_(name, func);
         this.expsym(name);
         return ret;
+    },
+    defun: function(name, func) {
+        return this.defun2(name, function(){
+            return this.succeed(func.apply(this, arguments));
+        });
     },
     special_: function(name, func) {
         return this.intern(name).special_op(func);
@@ -584,8 +589,10 @@ function read(stream, eof_error, eof_value) {
         stream.next();
         if (reader instanceof Function)
             ret = reader(stream, ch);
-        else
-            ret = fapply(reader, cons(stream, cons(ch, NIL)));
+        else {
+            // XXX: HACK, BIG HACK!  The whole reader should be implemented in continuation-passing style :-\
+            fapply(reader, cons(stream, cons(ch, NIL)), function(val){ ret = val });
+        }
         if (ret == null && !stream.in_list)
             // toplevel comment, advance
             ret = read(stream, eof_error, eof_value);
@@ -878,8 +885,8 @@ var analyze = (function(){
     });
     CL.special("FUNCTION", function(ast){
         var name = car(ast);
-        return function(env) {
-            return env.get("f", name);
+        return function(env, succeed, fail) {
+            return NEXT(succeed, env.get("f", name), fail);
         };
     });
 
@@ -1193,7 +1200,10 @@ var analyze = (function(){
         // macro?
         var mac = $environment.get("m", operator);
         if (mac) {
-            return analyze(fapply(mac($environment), args));
+            // XXX: HACK, BIG HACK!  The whole reader should be implemented in continuation-passing style :-\
+            var ret;
+            analyze(fapply(mac($environment), args), function(val){ ret = val });
+            return ret;
         }
         // otherwise function call
         args = maplist(args, analyze);
@@ -1236,9 +1246,10 @@ function inject_lambda_args(aprocs, env, values, succeed, fail) {
 
 function fapply(func, values, succeed, fail) {
     if (func instanceof Function) {
-        return NEXT(succeed, func.apply({
+        return func.apply({
+            succeed: succeed,
             fail: fail
-        }, list_to_array(values)), fail);
+        }, list_to_array(values));
     }
     else if (func instanceof Array) {
         var args = func[0], body = func[1], env = func[2];
@@ -1337,15 +1348,15 @@ CL.defun("RPLACD", set_cdr);
     });
 }(0));
 
-CL.defun("FUNCALL", function(){
+CL.defun2("FUNCALL", function(){
     var list = array_to_list(arguments);
     var func = car(list), args = cdr(list);
     if (symbolp(func))
         func = _GLOBAL_ENV_.get("f", func);
-    return fapply(func, args);
+    return fapply(func, args, this.succeed, this.fail);
 });
 
-CL.defun("APPLY", function(func) {
+CL.defun2("APPLY", function(func) {
     if (symbolp(func))
         func = _GLOBAL_ENV_.get("f", func);
     var list = NIL, p, len = arguments.length - 1, last = arguments[len];
@@ -1359,7 +1370,7 @@ CL.defun("APPLY", function(func) {
     }
     if (p) set_cdr(p, last);
     else list = last;
-    return fapply(func, list);
+    return fapply(func, list, this.succeed, this.fail);
 });
 
 CL.defun("MACRO-FUNCTION", function(name, env){
@@ -1498,7 +1509,7 @@ JCLS.defun("CALL-NATIVE", function(path, obj, args){
 });
 
 JCLS.defun("TO-NATIVE", function(func){
-    return function() { return fapply(func, array_to_list(arguments)) };
+    return function() { return fapply(func, array_to_list(arguments), this.succeed, this.fail) };
 });
 
 //* Reader utils
