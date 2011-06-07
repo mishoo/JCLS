@@ -18,7 +18,7 @@ function that breaks the Lisp program into JavaScript closures.  It's
 probably not usable for real programming, as the interpreter is
 recursive and could blow the stack quite easily.
 
-Current features:
+Current features:  (see tmp/test.lisp for some disorganized tests)
 
 - basic Lisp stuff: CONS, LIST, C[AD]+R, QUOTE, IF, LAMBDA etc.
 - CL-style packages (supports private symbols, etc.)
