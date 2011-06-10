@@ -197,7 +197,7 @@ Package.prototype = {
 };
 
 var CL = new Package("COMMON-LISP", { nicknames: [ "CL" ] });
-var JCLS = new Package("JCLS");
+var JCLS = new Package("JCLS", { use: [ "CL" ]});
 var KEYWORD = new Package("KEYWORD");
 var CL_USER = new Package("CL-USER", {
     use: [ "CL" ]
@@ -654,7 +654,6 @@ function eq(x, y) { return (atom(x) && atom(y) && x === y) ? T : NIL };
 
 function NextCont(cont) { this.cont = cont };
 function NEXT() { return new NextCont(curry.apply(null, arguments)) };
-function NEXT2(cont, args) { return new NextCont(curry.apply(null, [ cont ].concat(args))) };
 function trampoline_apply(f, args) {
     while (true) {
         f = f.apply(null, args);
@@ -671,8 +670,7 @@ function trampoline_apply(f, args) {
 //
 var analyze = (function(){
     var LAMBDA  = CL.expsym("LAMBDA")
-    , PROGN = CL.expsym("PROGN")
-    , DEFVAR = CL.expsym("DEFVAR");
+    , PROGN = CL.expsym("PROGN");
 
     (function(UNQUOTE, SPLICE, NSPLICE, QUASIQUOTE){
         function Splice(list, destructive) {
@@ -681,6 +679,7 @@ var analyze = (function(){
         };
         function cons_splice(a, b) {
             if (a instanceof Splice) {
+                if (nullp(a.list)) return b;
                 a = a.destructive ? a.list : copy_list(a.list);
                 set_cdr(last(a), b);
                 return a;
@@ -750,139 +749,6 @@ var analyze = (function(){
         else return do_sequence(ast);
     });
 
-    (function(dv){
-        CL.special("DEFVAR", dv);
-        CL.special("DEFPARAMETER", dv);
-    })(function(ast){
-        var name = car(ast), value = analyze(cadr(ast));
-        return function(env) {
-            if (this === DEFVAR && name.special_var())
-                return name;
-            name.special_var(true);
-            return name.bind(value(env));
-        };
-    });
-
-    CL.special("LET", function(ast){
-        var names = [], values = [];
-        eachlist(car(ast), function(def){
-            names.push(listp(def) ? car(def) : def);
-            values.push(analyze(listp(def) ? cadr(def) : NIL));
-        });
-        var body = do_sequence(cdr(ast));
-        return function(env) {
-            var val = values.map(function(proc){ return proc(env) });
-            env = env.fork();
-            var specials = [];
-            for (var i = 0; i < names.length; ++i) {
-                var name = names[i];
-                if (name.special_var()) {
-                    name.bind(val[i]);
-                    specials.push(name);
-                } else {
-                    env.force("v", names[i], val[i]);
-                }
-            }
-            try {
-                return body(env);
-            } finally {
-                for (i = specials.length; --i >= 0;)
-                    specials[i].unbind();
-            }
-        };
-    });
-    CL.special("LET*", function(ast){
-        var names = [], values = [];
-        eachlist(car(ast), function(def){
-            names.push(listp(def) ? car(def) : def);
-            values.push(analyze(listp(def) ? cadr(def) : NIL));
-        });
-        var body = do_sequence(cdr(ast));
-        return function(env) {
-            env = env.fork();
-            var specials = [];
-            for (var i = 0; i < names.length; ++i) {
-                var name = names[i];
-                if (name.special_var()) {
-                    name.bind(values[i](env));
-                    specials.push(name);
-                } else {
-                    env.force("v", name, values[i](env));
-                }
-            }
-            try {
-                return body(env);
-            } finally {
-                for (i = specials.length; --i >= 0;)
-                    specials[i].unbind();
-            }
-        };
-    });
-    // these are so similar to LET/FLET it's almost boring.
-    CL.special("FLET", function(ast){
-        var names = [], values = [];
-        eachlist(car(ast), function(def){
-            names.push(car(def));
-            values.push(do_lambda(cadr(def), cddr(def)));
-        });
-        var body = do_sequence(cdr(ast));
-        return function(env) {
-            var val = values.map(function(proc){ return proc(env) });
-            env = env.fork();
-            for (var i = 0; i < names.length; ++i) {
-                env.force("f", names[i], val[i]);
-            }
-            return body(env);
-        };
-    });
-    CL.special("LABELS", function(ast){
-        var names = [], values = [];
-        eachlist(car(ast), function(def){
-            names.push(car(def));
-            values.push(do_lambda(cadr(def), cddr(def)));
-        });
-        var body = do_sequence(cdr(ast));
-        return function(env) {
-            env = env.fork();
-            for (var i = 0; i < names.length; ++i) {
-                env.force("f", names[i], values[i](env));
-            }
-            return body(env);
-        };
-    });
-    CL.special("PSETQ", function(defs){
-        var names = [], values = [];
-        while (!nullp(defs)) {
-            names.push(car(defs));
-            values.push(analyze(cadr(defs)));
-            defs = cddr(defs);
-        }
-        return function(env) {
-            var val = values.map(function(proc){ return proc(env) });
-            for (var ret = NIL, i = 0; i < names.length; ++i)
-                env.set("v", names[i], ret = val[i]);
-            return ret;
-        };
-    });
-    CL.special("SETQ", function(defs){
-        var names = [], values = [];
-        while (!nullp(defs)) {
-            names.push(car(defs));
-            values.push(analyze(cadr(defs)));
-            defs = cddr(defs);
-        }
-        return function(env) {
-            for (var ret = NIL, i = 0; i < names.length; ++i)
-                env.set("v", names[i], ret = values[i](env));
-            return ret;
-        };
-    });
-    CL.special("DEFUN", function(ast){
-        var name = car(ast), func = do_lambda(cadr(ast), cddr(ast));
-        return function(env) {
-            return _GLOBAL_ENV_.force("f", name, func(env));
-        };
-    });
     CL.special("FUNCTION", function(ast){
         var name = car(ast);
         return function(env, succeed, fail) {
@@ -895,70 +761,40 @@ var analyze = (function(){
         _GLOBAL_ENV_.force("m", name, func);
         return itself(NIL);
     });
-    CL.special("DESTRUCTURING-BIND", function(ast){
-        var names = do_lambda_list(car(ast), true);
-        var expr = analyze(cadr(ast));
-        var body = do_sequence(cddr(ast));
-        return function(env) {
-            var values = expr(env);
-            env = env.fork();
-            eachlist(names, function(arg){
-                values = arg(env, values);
-            });
-            return body(env);
-        };
-    });
 
-    (function(Catch){
-        CL.special("CATCH", function(ast){
-            var name = analyze(car(ast));
-            var body = do_sequence(cdr(ast));
-            return function(env) {
-                var symbol = name(env);
-                try {
-                    return body(env);
-                }
-                catch(ex) {
-                    if (ex instanceof Catch && ex.symbol === symbol)
-                        return ex.value;
-                    else throw ex;
-                }
+    // to manipulate the environment
+    {
+        JCLS.special("FORK-ENVIRONMENT", function(body){
+            body = do_sequence(body);
+            return function(env, succeed, fail) {
+                return NEXT(body, env.fork(), succeed, fail);
             };
         });
-        CL.special("THROW", function(ast){
-            var tag = analyze(car(ast));
-            var val = analyze(cadr(ast));
-            return function(env) {
-                throw new Catch(tag(env), val(env));
+
+        JCLS.special("SET!", function(ast){
+            var name = car(ast);
+            var kind = cadr(ast);
+            var value = analyze(caddr(ast));
+            return function(env, succeed, fail) {
+                return NEXT(value, env, function(value, fail2){
+                    env.set(kind, name, value);
+                    return NEXT(succeed, value, fail2);
+                }, fail);
             };
         });
-        CL.special("IGNORE-ERRORS", function(ast){
-            var body = do_sequence(ast);
-            return function(env) {
-                try {
-                    return body(env);
-                } catch(ex) {
-                    if (!(ex instanceof Catch))
-                        return NIL;
-                    throw ex;
-                }
+
+        JCLS.special("DEF!", function(ast){
+            var name = car(ast);
+            var kind = cadr(ast);
+            var value = analyze(caddr(ast));
+            return function(env, succeed, fail) {
+                return NEXT(value, env, function(value, fail2){
+                    env.force(kind, name, value);
+                    return NEXT(succeed, value, fail2);
+                }, fail);
             };
         });
-        CL.special("UNWIND-PROTECT", function(ast){
-            var expr = analyze(car(ast));
-            var body = do_sequence(cdr(ast));
-            return function(env) {
-                try {
-                    return expr(env);
-                } finally {
-                    body(env);
-                }
-            };
-        });
-    }(function(symbol, value) {
-        this.symbol = symbol;
-        this.value = value;
-    }));
+    }
 
     function analyze(expr) {
         var tmp;
@@ -991,24 +827,24 @@ var analyze = (function(){
 
             // HELL.p!
 
-            if ($level == 0 && (tmp === CL.find_symbol("DEFUN")
-                                || tmp === CL.find_symbol("DEFMACRO")
-                                || tmp === CL.find_symbol("LET")
-                                || tmp === CL.find_symbol("LET*")
-                                || tmp === CL.find_symbol("FLET")
-                                || tmp === CL.find_symbol("LABELS")))
-            {
-                // calling run here evaluates the stuff at "compile-time".
-                // because it happens that $environment == _GLOBAL_ENV_,
-                // after compiling we'll get the defuns and defmacros right.
-                run($environment, function(){}, function(){});
+            // if ($level == 0 && (tmp === CL.find_symbol("DEFUN")
+            //                     || tmp === CL.find_symbol("DEFMACRO")
+            //                     || tmp === CL.find_symbol("LET")
+            //                     || tmp === CL.find_symbol("LET*")
+            //                     || tmp === CL.find_symbol("FLET")
+            //                     || tmp === CL.find_symbol("LABELS")))
+            // {
+            //     // calling run here evaluates the stuff at "compile-time".
+            //     // because it happens that $environment == _GLOBAL_ENV_,
+            //     // after compiling we'll get the defuns and defmacros right.
+            //     run($environment, function(){}, function(){});
 
-                // by returning NIL we effectively discard these from
-                // the tree, such that at evaluation time these forms
-                // won't run a second time.  that's probably wrong in
-                // the general case. (we need eval-when)
-                return itself(NIL);
-            }
+            //     // by returning NIL we effectively discard these from
+            //     // the tree, such that at evaluation time these forms
+            //     // won't run a second time.  that's probably wrong in
+            //     // the general case. (we need eval-when)
+            //     return itself(NIL);
+            // }
 
             return run;
         }
@@ -1173,10 +1009,11 @@ var analyze = (function(){
     function do_sequence(list) {
         list = maplist(list, analyze);
         return function(env, succeed, fail) {
+            var p = list;
             return NEXT(function goon(ret, fail2){
-                if (nullp(list)) return NEXT(succeed, ret, fail2);
-                var expr = car(list);
-                list = cdr(list);
+                if (nullp(p)) return NEXT(succeed, ret, fail2);
+                var expr = car(p);
+                p = cdr(p);
                 return NEXT(expr, env, goon, fail2);
             }, NIL);
         };
@@ -1202,7 +1039,15 @@ var analyze = (function(){
         if (mac) {
             // XXX: HACK, BIG HACK!  The whole reader should be implemented in continuation-passing style :-\
             var ret;
-            analyze(fapply(mac($environment), args), function(val){ ret = val });
+            trampoline_apply(mac, [
+                $environment,
+                function(func){
+                    return fapply(func, args, function(val){
+                        return ret = analyze(val);
+                    });
+                }
+            ]);
+            // XXX: this is horrible.
             return ret;
         }
         // otherwise function call
@@ -1239,7 +1084,7 @@ function inject_lambda_args(aprocs, env, values, succeed, fail) {
     if (nullp(aprocs)) return NEXT(succeed, NIL, fail);
     return NEXT(car(aprocs), env, values, function(next_values, fail2){
         return NEXT(inject_lambda_args, cdr(aprocs), env, next_values, function(results, fail3){
-            return succeed(T, fail3);
+            return succeed(results, fail3);
         }, fail2);
     }, fail);
 };
@@ -1253,7 +1098,13 @@ function fapply(func, values, succeed, fail) {
     }
     else if (func instanceof Array) {
         var args = func[0], body = func[1], env = func[2];
-        return inject_lambda_args(args, env, values, curry(NEXT, body, env, succeed, fail), fail);
+        return inject_lambda_args(
+            args,
+            env,
+            values,
+            curry(NEXT, body, env, succeed, fail),
+            fail
+        );
     }
 };
 
@@ -1334,14 +1185,13 @@ CL.defun("ATOM", function(arg) { return atom(arg) ? T : NIL });
 CL.defun("SYMBOLP", function(arg) { return symbolp(arg) ? T : NIL });
 CL.defun("EQ", eq);
 CL.defun("CONS", cons);
-CL.defun("LISTP", function(expr){
-    return listp(expr) ? expr : NIL;
-});
+CL.defun("LISTP", function(expr){ return listp(expr) ? expr : NIL });
 CL.defun("LAST", last);
 CL.defun("LIST", function(){ return array_to_list(arguments) });
 CL.defun("EVAL", eval);
 CL.defun("RPLACA", set_car);
 CL.defun("RPLACD", set_cdr);
+
 (function(counter){
     CL.defun("GENSYM", function(name){
         return new Symbol(null, (name || "G") + (++counter));
