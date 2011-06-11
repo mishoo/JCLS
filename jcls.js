@@ -281,11 +281,14 @@ function eachlist(list, func) {
 function maplist(list, func) {
     var ret = NIL, p;
     while (!nullp(list)) {
-        var tmp = cons(func(car(list)), NIL);
+        var val = func(car(list));
+        if (val != null) {
+            var tmp = cons(val, NIL);
+            if (p) set_cdr(p, tmp);
+            else ret = tmp;
+            p = tmp;
+        }
         list = cdr(list);
-        if (p) set_cdr(p, tmp);
-        else ret = tmp;
-        p = tmp;
     }
     return ret;
 };
@@ -807,14 +810,86 @@ var analyze = (function(){
             var name = car(ast);
             var kind = cadr(ast);
             var value = analyze(caddr(ast));
+            var global = cadddr(ast); // only T or NIL
             return function(env, succeed, fail) {
                 return NEXT(value, env, function(value, fail2){
-                    env.force(kind, name, value);
+                    (nullp(global) ? env : $environment).force(kind, name, value);
                     return NEXT(succeed, value, fail2);
                 }, fail);
             };
         });
+
+        JCLS.special("SPECIAL!", function(ast){
+            var name = car(ast);
+            return function(env, succeed, fail) {
+                var spec = !nullp(cadr(ast));
+                name.special_var(spec);
+                return NEXT(succeed, spec);
+            };
+        });
+
+        JCLS.special("SPECIAL?", function(ast){
+            var name = car(ast);
+            return function(env, succeed, fail) {
+                NEXT(succeed, name.special_var());
+            };
+        });
     }
+
+    CL.special("UNWIND-PROTECT", function(ast){
+        var expr = analyze(car(ast)), cleanup = do_sequence(cdr(ast));
+        return function(env, succeed, fail){
+            return NEXT(expr, env, function(expr, fail2){
+                return NEXT(cleanup, env, curry(succeed, expr, fail2), fail2);
+            }, function(expr){
+                return NEXT(cleanup, env, fail2);
+            });
+        };
+    });
+
+    CL.special("TAGBODY", function(list){
+        var tags = [];
+        var ct = null;
+        eachlist(list, function(node){
+            if (atom(node)) {
+                if (ct) {
+                    if (tags.length == 0) tags.push(NIL);
+                    ct.push(cons(CL.intern("GO"), cons(node, NIL)));
+                    tags.push(do_sequence(array_to_list(ct)));
+                }
+                tags.push(node);
+                ct = [];
+            } else {
+                if (!ct) ct = [];
+                ct.push(node);
+            }
+        });
+        if (tags.length == 0) tags[0] = NIL;
+        tags.push(do_sequence(array_to_list(ct)));
+        return function(env, succeed, fail) {
+            if (tags.length > 0) {
+                env = env.fork();
+                for (var i = 0; i < tags.length;) {
+                    env.force("t", tags[i++], tags[i++]);
+                }
+            }
+            return NEXT(tags[1], env, succeed, function(){
+                succeed(NIL, fail);
+            });
+        };
+    });
+
+    CL.special("GO", function(tag){
+        tag = car(tag);
+        if (!symbolp(tag)) throw new Error("Expecting a symbol for GO");
+        return function(env, succeed, fail) {
+            var cont = env.get("t", tag);
+            if (!cont) throw new Error("GO tag not found " + tag);
+            return NEXT(cont, env, function(){
+                fail();
+            }, fail);
+        };
+    });
 
     function analyze(expr) {
         var tmp;
@@ -992,15 +1067,17 @@ var analyze = (function(){
 
     function do_sequence(list) {
         list = maplist(list, analyze);
-        return function(env, succeed, fail) {
-            var p = list;
-            return NEXT(function goon(ret, fail2){
-                if (nullp(p)) return NEXT(succeed, ret, fail2);
-                var expr = car(p);
-                p = cdr(p);
-                return NEXT(expr, env, goon, fail2);
-            }, NIL);
-        };
+        function seq(a, b) {
+            return function(env, succ, fail) {
+                return NEXT(a, env, function(a, fail2){
+                    return NEXT(b, env, succ, fail2);
+                }, fail);
+            };
+        }
+        return (function loop(first, rest) {
+            if (nullp(rest)) return first;
+            else return loop(seq(first, car(rest)), cdr(rest));
+        })(car(list), cdr(list));
     };
 
     function get_args(aprocs, env, succeed, fail) {

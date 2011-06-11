@@ -15,11 +15,15 @@
 (in-package :cl)
 
 (jcls:import '(jcls::fork-environment
+               jcls::def!
+               jcls::set!
                jcls::def-f!
                jcls::def-v!
                jcls::set-v!
                jcls::in-package
-               jcls::export))
+               jcls::export
+               jcls::special!
+               jcls::special?))
 
 (defmacro def-emac (name args &body body)
   `(progn
@@ -69,7 +73,20 @@
      ,@body)))
 
 (def-emac defun (name args &body body)
-  `(def-f! ,name ,args ,@body))
+  `(def! ,name "f" (lambda ,args ,@body) t))
+
+(def-emac defparameter (name value &optional doc)
+  `(progn
+     (jcls:def! ,name "v" nil t)
+     (jcls:special! ,name)
+     (setq ,name ,value)))
+
+;; XXX: SETF required for INCF/DECF
+(def-emac incf (name &optional (delta 1))
+  `(setq ,name (1+ ,name)))
+
+(def-emac decf (name &optional (delta 1))
+  `(setq ,name (1- ,name)))
 
 (defmacro def-efun (name args &body body)
   `(progn
