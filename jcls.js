@@ -654,9 +654,9 @@ function eq(x, y) { return (atom(x) && atom(y) && x === y) ? T : NIL };
 
 function NextCont(cont) { this.cont = cont };
 function NEXT() { return new NextCont(curry.apply(null, arguments)) };
-function trampoline_apply(f, args) {
+function trampoline_apply(f, args, obj) {
     while (true) {
-        f = f.apply(null, args);
+        f = f.apply(obj, args);
         if (f instanceof NextCont) f = f.cont;
         else return f;
     }
@@ -762,6 +762,26 @@ var analyze = (function(){
         return itself(NIL);
     });
 
+    CL.special("MACROEXPAND-1", function(ast){
+        var tree = analyze(car(ast)), menv = analyze(cadr(ast));
+        return function(env, succeed, fail0) {
+            return NEXT(menv, env, function(menv, fail1){
+                return NEXT(tree, env, function(tree, fail2){
+                    var m = env.get("m", car(tree));
+                    if (!m) return succeed(tree);
+                    return NEXT(
+                        m,
+                        nullp(menv) ? $environment : menv,
+                        function(func){
+                            return fapply(func, cdr(tree), succeed, fail2);
+                        },
+                        fail2
+                    );
+                }, fail1);
+            }, fail0);
+        };
+    });                         // my brain's on fire.
+
     // to manipulate the environment
     {
         JCLS.special("FORK-ENVIRONMENT", function(body){
@@ -810,43 +830,7 @@ var analyze = (function(){
         }
         else if (numberp(expr) || stringp(expr)) return itself(expr);
         else if (atom(tmp = car(expr))) {
-
-            if (tmp !== PROGN) ++$level;
-            var run = do_application(tmp, cdr(expr));
-            if (tmp !== PROGN) --$level;
-
-            // XXX: I don't like this.
-
-            // evaluating all is a bad idea
-            // if ($level == 0 && tmp !== PROGN) {
-            //     run($environment);
-            // }
-
-            // Are we safe if we only evaluate DEFUN, DEFMACRO and LET?
-            // And return NIL?
-
-            // HELL.p!
-
-            // if ($level == 0 && (tmp === CL.find_symbol("DEFUN")
-            //                     || tmp === CL.find_symbol("DEFMACRO")
-            //                     || tmp === CL.find_symbol("LET")
-            //                     || tmp === CL.find_symbol("LET*")
-            //                     || tmp === CL.find_symbol("FLET")
-            //                     || tmp === CL.find_symbol("LABELS")))
-            // {
-            //     // calling run here evaluates the stuff at "compile-time".
-            //     // because it happens that $environment == _GLOBAL_ENV_,
-            //     // after compiling we'll get the defuns and defmacros right.
-            //     run($environment, function(){}, function(){});
-
-            //     // by returning NIL we effectively discard these from
-            //     // the tree, such that at evaluation time these forms
-            //     // won't run a second time.  that's probably wrong in
-            //     // the general case. (we need eval-when)
-            //     return itself(NIL);
-            // }
-
-            return run;
+            return do_application(tmp, cdr(expr));
         }
         else if (caar(expr) === LAMBDA) {
             return do_inline_call(cadar(expr), cddar(expr), cdr(expr));
@@ -1002,7 +986,7 @@ var analyze = (function(){
         body = do_sequence(body);
         return function(env, succeed, fail) {
             if (nullp(env)) env = _GLOBAL_ENV_;
-            return succeed([ args, body, env ], fail);
+            return NEXT(succeed, [ args, body, env ], fail);
         };
     };
 
@@ -1073,7 +1057,6 @@ var analyze = (function(){
         };
     };
 
-    var $level = 0;
     var $environment = _GLOBAL_ENV_;
 
     return analyze;
@@ -1203,7 +1186,7 @@ CL.defun2("FUNCALL", function(){
     var func = car(list), args = cdr(list);
     if (symbolp(func))
         func = _GLOBAL_ENV_.get("f", func);
-    return fapply(func, args, this.succeed, this.fail);
+    return NEXT(fapply, func, args, this.succeed, this.fail);
 });
 
 CL.defun2("APPLY", function(func) {
@@ -1220,7 +1203,7 @@ CL.defun2("APPLY", function(func) {
     }
     if (p) set_cdr(p, last);
     else list = last;
-    return fapply(func, list, this.succeed, this.fail);
+    return NEXT(fapply, func, list, this.succeed, this.fail);
 });
 
 CL.defun("MACRO-FUNCTION", function(name, env){
