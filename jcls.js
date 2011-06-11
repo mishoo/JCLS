@@ -183,7 +183,7 @@ Package.prototype = {
     },
     defun: function(name, func) {
         return this.defun2(name, function(){
-            return this.succeed(func.apply(this, arguments));
+            return this.succeed(func.apply(this, arguments), this.fail);
         });
     },
     special_: function(name, func) {
@@ -1326,22 +1326,11 @@ JCLS.defun("NATIVE", function(){
     return g;
 });
 
-JCLS.defun("CALL-NATIVE", function(path, obj, args){
-    var g = global;
-    var f;
-    if (listp(path)) {
-        while (!nullp(cdr(path))) {
-            g = g[car(path)];
-            path = cdr(path);
-        }
-        f = g[car(path)];
-    } else {
-        f = obj[path];
-    }
-    return f.apply(nullp(obj) ? g : obj, list_to_array(args));
+JCLS.defun("APPLY-NATIVE", function(func, obj, args){
+    return func.apply(nullp(obj) ? global : obj, list_to_array(args));
 });
 
-JCLS.defun("TO-NATIVE", function(func){
+JCLS.defun("MAKE-NATIVE-FUNCTION", function(func){
     return function() { return fapply(func, array_to_list(arguments), this.succeed, this.fail) };
 });
 

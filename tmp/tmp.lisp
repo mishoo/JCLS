@@ -26,9 +26,8 @@
               ((2 4 5) "bar")
               (3 "baz")))
 
-(jcls:print (let ((obj (funcall (jcls:native "Array") 1 2 3)))
-              (jcls:call-native "join" obj '(", "))))
-
 (jcls:print (macroexpand-1 '(or 1 2 3)))
+
+
 
 (gensym)
