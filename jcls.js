@@ -1134,6 +1134,7 @@ var analyze = (function(){
         body = do_sequence(body);
         values = maplist(values, analyze);
         return function(env, succeed, fail){
+            if (!nullp(args)) env = env.fork();
             return NEXT(get_args, values, env, function(values, fail2){
                 return NEXT(fapply, [ args, body, env ], values, succeed, fail);
             }, fail);
