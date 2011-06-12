@@ -910,7 +910,7 @@ var analyze = (function(){
             return NEXT(func, env, function(func, fail2){
                 return NEXT(fapply, func, cons(function(val){
                     return NEXT(succeed, val, fail);
-                }, NIL), null, fail2);
+                }, NIL), function(){}, fail2);
             }, fail);
         };
     });
@@ -1319,11 +1319,12 @@ CL.defun("ERROR", function(text){
 
 /* -----[ Arithmetic ]----- */
 
-CL.defun("+", function(a, b){
+CL.defun("+", function(){
     return [].slice.call(arguments).reduce(function(a, b){ return a + b }, 0);
 });
 
-CL.defun("-", function(){
+CL.defun("-", function(a){
+    if (arguments.length == 1) return -a;
     return [].slice.call(arguments, 1).reduce(function(a, b){ return a - b }, arguments[0]);
 });
 
@@ -1332,6 +1333,7 @@ CL.defun("*", function(){
 });
 
 CL.defun("/", function(){
+    if (arguments.length == 1) return 1/a;
     return [].slice.call(arguments, 1).reduce(function(a, b){ return a / b }, arguments[0]);
 });
 
