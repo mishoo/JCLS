@@ -81,6 +81,12 @@
      (jcls:special! ,name)
      (setq ,name ,value)))
 
+(def-emac prog1 (first &body body)
+  (let ((v1 (gensym)))
+    `(let ((,v1 ,first))
+       ,@body
+       ,v1)))
+
 ;; XXX: SETF required for INCF/DECF
 (def-emac incf (name &optional (delta 1))
   `(setq ,name (1+ ,name)))
