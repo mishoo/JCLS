@@ -4,7 +4,7 @@
 
 (defparameter amb-fail
   (lambda ()
-    (error "amb tree exhausted")))
+    (print "amb tree exhausted")))
 
 (defun map (func list)
   (if list
@@ -26,15 +26,30 @@
                alternatives)
         (funcall +prev-amb-fail)))))
 
-(print (macroexpand-1 '(amb)))
-(print (macroexpand-1 (macroexpand-1 '(amb 1 2 3))))
+;; (print (macroexpand-1 '(amb 1 2)))
 
-(defun foo ()
-  (let ((a (amb 1 2 3 4 5 6))
-        (b (amb 1 2 3 4 5 6)))
-    (unless (= 12 (* a b))
-      (amb))
-    (print "a: " a "b: " b)
-    (amb)))
+;; (let ((a (amb 1 2 3 4 5 6))
+;;       (b (amb 1 2 3 4 5 6)))
+;;   (unless (= 12 (* a b))
+;;     (amb))
+;;   (print "a: " a "b: " b)
+;;   (amb))
 
-(foo)
+;; (print "Okay, let's see more.")
+
+(let ((n 10)
+      (required 1))
+  (labels ((rec (numbers next)
+             (if (= next n)
+                 (progn
+                   (if (not (= required (apply (function +) next numbers)))
+                       ;; not required sum, then fail
+                       (amb)
+                       ;; solution:
+                       (progn
+                         (print (cons next numbers))
+                         (amb))))
+                 (rec (cons (amb next (- next))
+                            (copy-list numbers))
+                      (1+ next)))))
+    (rec nil 1)))
