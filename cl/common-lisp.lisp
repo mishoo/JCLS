@@ -22,6 +22,10 @@
      (export ',name)
      (defmacro ,name ,args ,@body)))
 
+(def-emac when (condition &body body)
+  `(if ,condition
+       (progn ,@body)))
+
 (def-emac let* (defs &body body)
   (fork-environment
    (def-f! recur (defs)
@@ -38,11 +42,10 @@
    (def! values "v" nil)
    ;; XXX: this is quite inefficient (at compile-time)
    (def-f! recur (defs)
-     (if defs
-         (progn
-           (set! names "v" `(,@names ,(caar defs)))
-           (set! values "v" `(,@values ,(cadar defs)))
-           (recur (cdr defs)))))
+     (when defs
+       (set! names "v" `(,@names ,(caar defs)))
+       (set! values "v" `(,@values ,(cadar defs)))
+       (recur (cdr defs))))
    (recur defs)
    `((lambda ,names ,@body) ,@values)))
 
@@ -106,10 +109,6 @@
 
 (def-emac not (condition)
   `(if ,condition nil t))
-
-(def-emac when (condition &body body)
-  `(if ,condition
-       (progn ,@body)))
 
 (def-emac unless (condition &body body)
   `(when (not ,condition)
@@ -175,11 +174,10 @@
             (car seqs)))))
 
 (def-efun foreach (list func)
-  (if list
-      (progn
-        (funcall func (car list))
-        (foreach (cdr list) func)
-        nil)))
+  (when list
+    (funcall func (car list))
+    (foreach (cdr list) func)
+    nil))
 
  ;;; END
 
