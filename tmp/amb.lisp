@@ -41,17 +41,14 @@
   (call/cc
    (lambda (k)
      (setq amb-fail k)
-     (labels ((required-sum? (numbers next)
-                (= required (apply (function +) next numbers)))
+     (labels ((required-sum? (numbers)
+                (= required (apply (function +) numbers)))
               (rec (numbers next)
-                (if (= next 1)
+                (if (= next 0)
                     (progn
-                      (if (not (required-sum? numbers next))
-                          (amb)         ; failure
-                          (progn
-                            (print (cons next numbers))
-                            (amb)       ; search more solutions
-                            )))
+                      (when (required-sum? numbers)
+                        (print numbers))
+                      (amb))
                     (rec (cons (amb next (- next))
                                (copy-list numbers))
                          (1- next)))))
