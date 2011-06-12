@@ -3,12 +3,6 @@
 (defmacro def-f! (name args &body body)
   `(def! ,name "f" (lambda ,args ,@body)))
 
-(defmacro def-v! (name val)
-  `(def! ,name "v" ,val))
-
-(defmacro set-v! (name val)
-  `(set! ,name "v" ,val))
-
 (defmacro in-package (name)
   `(set! *package* "v" (find-package name)))
 
@@ -18,8 +12,6 @@
                jcls::def!
                jcls::set!
                jcls::def-f!
-               jcls::def-v!
-               jcls::set-v!
                jcls::in-package
                jcls::export
                jcls::special!
@@ -30,34 +22,26 @@
      (export ',name)
      (defmacro ,name ,args ,@body)))
 
-(def-emac setq (&rest defs)
-  (fork-environment
-   (def-f! recur (defs)
-     (if defs
-         `((set-v! ,(car defs) ,(cadr defs))
-           ,@(recur (cddr defs)))))
-   `(progn ,@(recur defs))))
-
 (def-emac let* (defs &body body)
   (fork-environment
    (def-f! recur (defs)
      (if defs
-         `((def-v! ,(caar defs) ,(cadar defs))
-           ,@(recur (cdr defs)))))
+         (cons `(def! ,(caar defs) "v" ,(cadar defs))
+               (recur (cdr defs)))))
    `(fork-environment
      ,@(recur defs)
      ,@body)))
 
 (def-emac let (defs &body body)
   (fork-environment
-   (def-v! names nil)
-   (def-v! values nil)
-   ;; XXX: this is quite inefficient
+   (def! names "v" nil)
+   (def! values "v" nil)
+   ;; XXX: this is quite inefficient (at compile-time)
    (def-f! recur (defs)
      (if defs
          (progn
-           (set-v! names `(,@names ,(caar defs)))
-           (set-v! values `(,@values ,(cadar defs)))
+           (set! names "v" `(,@names ,(caar defs)))
+           (set! values "v" `(,@values ,(cadar defs)))
            (recur (cdr defs)))))
    (recur defs)
    `((lambda ,names ,@body) ,@values)))
@@ -66,11 +50,30 @@
   (fork-environment
    (def-f! recur (defs)
      (if defs
-         `((def-f! ,(caar defs) ,(cadar defs) ,@(cddar defs))
-           ,@(recur (cdr defs)))))
+         (cons `(def-f! ,(caar defs) ,(cadar defs) ,@(cddar defs))
+               (recur (cdr defs)))))
    `(fork-environment
      ,@(recur defs)
      ,@body)))
+
+(def-emac flet (defs &body body)
+  (labels ((recur (defs)
+             (if defs
+                 (cons `(list ',(caar defs) (lambda ,(cadar defs) ,@(cddar defs)))
+                       (recur (cdr defs))))))
+    (let ((tmp (gensym)))
+      `(let ((,tmp (list ,@(recur defs))))
+         (foreach ,tmp
+                  (lambda (def)
+                    (def! (car def) "f" (cadr def))))
+         ,@body))))
+
+(def-emac setq (&rest defs)
+  (labels ((recur (defs)
+             (if defs
+                 (cons `(set! ,(car defs) "v" ,(cadr defs))
+                       (recur (cddr defs))))))
+    `(progn ,@(recur defs))))
 
 (def-emac defun (name args &body body)
   `(def! ,name "f" (lambda ,args ,@body) t))
@@ -156,8 +159,27 @@
                                        ,(recur (cdr cases))))))))
                 (recur cases)))))
 
-(def-efun append (&rest lists)
-  )
+(def-efun copy-list (list)
+  (if list (cons (car list)
+                 (copy-list (cdr list)))))
+
+(labels ((a2 (a b)
+           (if a
+               (cons (car a) (a2 (cdr a) b))
+               b)))
+  (def-efun append (&rest seqs)
+    (if (cdr seqs)
+        (a2 (car seqs) (apply (function append) (cdr seqs)))
+        (if (listp (car seqs))
+            (copy-list (car seqs))
+            (car seqs)))))
+
+(def-efun foreach (list func)
+  (if list
+      (progn
+        (funcall func (car list))
+        (foreach (cdr list) func)
+        nil)))
 
  ;;; END
 

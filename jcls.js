@@ -811,10 +811,18 @@ var analyze = (function(){
             var kind = cadr(ast);
             var value = analyze(caddr(ast));
             var global = cadddr(ast); // only T or NIL
-            return function(env, succeed, fail) {
+            if (symbolp(name)) return function(env, succeed, fail) {
                 return NEXT(value, env, function(value, fail2){
                     (nullp(global) ? env : $environment).force(kind, name, value);
                     return NEXT(succeed, value, fail2);
+                }, fail);
+            };
+            else return name = analyze(name), function(env, succeed, fail) {
+                return NEXT(name, env, function(name, fail2){
+                    return NEXT(value, env, function(value, fail3){
+                        (nullp(global) ? env : $environment).force(kind, name, value);
+                        return NEXT(succeed, value, fail3);
+                    }, fail2);
                 }, fail);
             };
         });
@@ -902,7 +910,7 @@ var analyze = (function(){
             return NEXT(func, env, function(func, fail2){
                 return NEXT(fapply, func, cons(function(val){
                     return NEXT(succeed, val, fail);
-                }, NIL), function(){}, fail2);
+                }, NIL), null, fail2);
             }, fail);
         };
     });

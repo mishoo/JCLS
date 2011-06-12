@@ -84,7 +84,7 @@
       init))
 
 (defun reverse (list)
-    (reduce list (function cons) nil))
+  (reduce list (function cons) nil))
 
 (defun length (list)
   (labels ((rec (list len)
