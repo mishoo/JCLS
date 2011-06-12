@@ -37,19 +37,25 @@
 
 ;; (print "Okay, let's see more.")
 
-(let ((n 10)
-      (required 1))
-  (labels ((rec (numbers next)
-             (if (= next n)
-                 (progn
-                   (if (not (= required (apply (function +) next numbers)))
-                       ;; not required sum, then fail
-                       (amb)
-                       ;; solution:
-                       (progn
-                         (print (cons next numbers))
-                         (amb))))
-                 (rec (cons (amb next (- next))
-                            (copy-list numbers))
-                      (1+ next)))))
-    (rec nil 1)))
+(defun solutions (n &optional (required 1))
+  (call/cc
+   (lambda (k)
+     (setq amb-fail k)
+     (labels ((required-sum? (numbers next)
+                (= required (apply (function +) next numbers)))
+              (rec (numbers next)
+                (if (= next 1)
+                    (progn
+                      (if (not (required-sum? numbers next))
+                          (amb)         ; failure
+                          (progn
+                            (print (cons next numbers))
+                            (amb)       ; search more solutions
+                            )))
+                    (rec (cons (amb next (- next))
+                               (copy-list numbers))
+                         (1- next)))))
+       (rec nil n)))))
+
+(solutions 9)
+(print "we're done")
