@@ -854,7 +854,6 @@ var analyze = (function(){
             if (atom(node)) {
                 if (ct) {
                     if (tags.length == 0) tags.push(NIL);
-                    ct.push(cons(CL.intern("GO"), cons(node, NIL)));
                     tags.push(do_sequence(array_to_list(ct)));
                 }
                 tags.push(node);
@@ -866,16 +865,16 @@ var analyze = (function(){
         });
         if (tags.length == 0) tags[0] = NIL;
         tags.push(do_sequence(array_to_list(ct)));
+        var body = (function loop(i){
+            if (i == tags.length - 1) return tags[i];
+            return tags[i] = seq(tags[i], loop(i + 2));
+        })(1);
         return function(env, succeed, fail) {
-            if (tags.length > 0) {
-                env = env.fork();
-                for (var i = 0; i < tags.length;) {
-                    env.force("t", tags[i++], tags[i++]);
-                }
+            env = env.fork();
+            for (var i = 0; i < tags.length;) {
+                env.force("t", tags[i++], [ tags[i++], succeed ]);
             }
-            return NEXT(tags[1], env, succeed, function(){
-                succeed(NIL, fail);
-            });
+            return NEXT(body, env, succeed, fail);
         };
     });
 
@@ -885,8 +884,14 @@ var analyze = (function(){
         return function(env, succeed, fail) {
             var cont = env.get("t", tag);
             if (!cont) throw new Error("GO tag not found " + tag);
-            return NEXT(cont, env, function(){
-                fail();
+            return NEXT(cont[0], env, function(){
+                // A "successful" GO means that we reached the end of
+                // the tagbody statements.  We can't call succeed
+                // here--if we did, evaluation will continue with the
+                // line after the current GO statement.  What we
+                // should do instead is call the tagbody's success
+                // continuation.
+                return NEXT(cont[1], NIL, fail);
             }, fail);
         };
     });
@@ -1065,15 +1070,16 @@ var analyze = (function(){
         };
     };
 
+    function seq(a, b) {
+        return function(env, succeed, fail) {
+            return NEXT(a, env, function(a, fail2){
+                return NEXT(b, env, succeed, fail2);
+            }, fail);
+        };
+    };
+
     function do_sequence(list) {
         list = maplist(list, analyze);
-        function seq(a, b) {
-            return function(env, succ, fail) {
-                return NEXT(a, env, function(a, fail2){
-                    return NEXT(b, env, succ, fail2);
-                }, fail);
-            };
-        }
         return (function loop(first, rest) {
             if (nullp(rest)) return first;
             else return loop(seq(first, car(rest)), cdr(rest));

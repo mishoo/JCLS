@@ -1,31 +1,21 @@
 (jcls:import 'jcls:print)
 
-(progn
-  (tagbody
-   t1
-     (print "1")
-   t2
-     (print "2")
-   t3
-     (print "3"))
-  (print "dude"))
-
-(let ((count 0))
-  (tagbody
-   t1
-     (print "here")
-     (go t3)
-     (print "WTF")
-   t2
-     (print "and here")
-   t3
-     (print "beh")
-     (incf count)
-     (when (< count 2)
-       (go t2)))
-  (print "FINISHED"))
-
-(print "WTF")
+(tagbody
+ t1
+   (print 't1)
+   (go t3)
+ t2
+   (print 't2)
+   (labels ((foo ()
+              (print 'in-foo)
+              (go t4)))
+     (foo))
+   (print "won't reach here")
+ t3
+   (print 't3)
+   (go t2)
+ t4
+   (print 't4))
 
 ;; (defparameter *foo* 10)
 
