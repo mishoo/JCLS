@@ -179,6 +179,21 @@
     (foreach (cdr list) func)
     nil))
 
+(def-efun reduce (list proc init)
+  (if list
+      (reduce (cdr list) proc (funcall proc (car list) init))
+      init))
+
+(def-efun reverse (list)
+  (reduce list (function cons) nil))
+
+(def-efun length (list)
+  (labels ((rec (list len)
+             (if list
+                 (rec (cdr list) (1+ len))
+                 len)))
+    (rec list 0)))
+
  ;;; END
 
 (in-package :cl-user)
