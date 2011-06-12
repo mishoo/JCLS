@@ -1,21 +1,56 @@
 (jcls:import 'jcls:print)
 
-(tagbody
- t1
-   (print 't1)
-   (go t3)
- t2
-   (print 't2)
-   (labels ((foo ()
-              (print 'in-foo)
-              (go t4)))
-     (foo))
-   (print "won't reach here")
- t3
-   (print 't3)
-   (go t2)
- t4
-   (print 't4))
+(defparameter r nil)
+
+(print (+ 1 (jcls:call/cc (lambda (k)
+                            (setq r k)
+                            (+ 2 (funcall k 3))
+                            (jcls:print "moo")))))
+
+(print "we still get here")
+
+(funcall r 10)
+
+(gensym)
+
+;; (defparameter r nil)
+
+;; (print (+ 1 (jcls:call/cc (lambda (k)
+;;                             (setq r k)
+;;                             (+ 2 (funcall k 3))
+;;                             (jcls:print "moo")))))
+;; (print "here")
+;; (funcall r 10)
+;; (funcall r 12)
+
+
+;; (print "foo")
+;; (print "bar")
+;; (jcls:call/cc (lambda (k)
+;;                 (print "In here")
+;;                 (funcall k "RET1")
+;;                 (print "and here")
+;;                 (funcall k "RET2")
+;;                 (print "terminated")))
+;; (print "baz")
+;; (print 'mak)
+
+;; (tagbody
+;;  t1
+;;    (print 't1)
+;;    (go t3)
+;;  t2
+;;    (print 't2)
+;;    (labels ((foo ()
+;;               (print 'in-foo)
+;;               (go t4)))
+;;      (foo))
+;;    (print "won't reach here")
+;;  t3
+;;    (print 't3)
+;;    (go t2)
+;;  t4
+;;    (print 't4))
 
 ;; (defparameter *foo* 10)
 

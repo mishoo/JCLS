@@ -896,6 +896,17 @@ var analyze = (function(){
         };
     });
 
+    JCLS.special("CALL/CC", function(ast){
+        var func = analyze(car(ast));
+        return function(env, succeed, fail){
+            return NEXT(func, env, function(func, fail2){
+                return NEXT(fapply, func, cons(function(val){
+                    return NEXT(succeed, val, fail);
+                }, NIL), function(){}, fail2);
+            }, fail);
+        };
+    });
+
     function analyze(expr) {
         var tmp;
         if (symbolp(expr)) switch (expr) {
@@ -1292,6 +1303,11 @@ CL.defun2("APPLY", function(func) {
 
 CL.defun("MACRO-FUNCTION", function(name, env){
     return (nullp(env) ? _GLOBAL_ENV_ : env).get("m", name) || NIL;
+});
+
+// XXX: temporary
+CL.defun("ERROR", function(text){
+    throw new Error(text);
 });
 
 /* -----[ Arithmetic ]----- */
