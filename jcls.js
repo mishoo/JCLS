@@ -1153,7 +1153,6 @@ var analyze = (function(){
         body = do_sequence(body);
         values = maplist(values, analyze);
         return function(env, succeed, fail){
-            if (!nullp(args)) env = env.fork();
             return NEXT(get_args, values, env, function(values, fail2){
                 return NEXT(fapply, [ args, body, env ], values, succeed, fail);
             }, fail);
@@ -1183,7 +1182,7 @@ function fapply(func, values, succeed, fail) {
         }, list_to_array(values));
     }
     else if (func instanceof Array) {
-        var args = func[0], body = func[1], env = func[2];
+        var args = func[0], body = func[1], env = func[2].fork();
         return inject_lambda_args(
             args,
             env,
