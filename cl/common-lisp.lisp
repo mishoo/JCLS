@@ -4,7 +4,7 @@
   `(def! ,name "f" (lambda ,args ,@body)))
 
 (defmacro in-package (name)
-  `(set! *package* "v" (find-package name)))
+  `(set! *package* "v" (find-package ,name)))
 
 (in-package :cl)
 
