@@ -717,7 +717,7 @@ var analyze = (function(){
                 }
             }(stuff));
             return function(env, succeed, fail) {
-                return trampoline_apply(function walk(node, succeed, fail){
+                return NEXT(function walk(node, succeed, fail){
                     if (consp(node)) {
                         switch (car(node)) {
                           case UNQUOTE: return NEXT(cadr(node), env, succeed, fail);
@@ -736,7 +736,7 @@ var analyze = (function(){
                     } else {
                         return NEXT(succeed, node, fail);
                     }
-                }, [ stuff, succeed, fail ]);
+                }, stuff, succeed, fail);
             };
         });
     }(JCLS.intern("UNQUOTE"),
