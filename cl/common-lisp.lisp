@@ -3,8 +3,18 @@
 (defmacro def-f! (name args &body body)
   `(def! ,name "f" (lambda ,args ,@body)))
 
-(defmacro in-package (name)
+(export 'def-emac)
+(defmacro def-emac (name args &body body)
+  `(progn
+     (export ',name)
+     (defmacro ,name ,args ,@body)))
+
+(def-emac in-package (name)
   `(set! *package* "v" (find-package ,name)))
+
+(def-emac with-cc ((var) &body body)
+  `(call/cc (lambda (,var)
+              ,@body)))
 
 (in-package :cl)
 
@@ -12,15 +22,11 @@
                jcls::def!
                jcls::set!
                jcls::def-f!
+               jcls::def-emac
                jcls::in-package
                jcls::export
                jcls::special!
                jcls::special?))
-
-(defmacro def-emac (name args &body body)
-  `(progn
-     (export ',name)
-     (defmacro ,name ,args ,@body)))
 
 (def-emac when (condition &body body)
   `(if ,condition
