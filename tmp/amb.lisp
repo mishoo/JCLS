@@ -12,15 +12,17 @@
             (map func (cdr list)))))
 
 (defmacro amb (&rest alternatives)
-  `(let ((+prev-amb-fail amb-fail))
-     (with-cc (+sk)
-       ,@(map (lambda (alt)
-                `(with-cc (+fk)
-                   (setq amb-fail +fk)
-                   (funcall +sk ,alt)))
-              alternatives)
-       (setq amb-fail +prev-amb-fail)
-       (funcall +prev-amb-fail))))
+  (if alternatives
+      `(let ((+prev-amb-fail amb-fail))
+         (with-cc (+sk)
+           ,@(map (lambda (alt)
+                    `(with-cc (+fk)
+                       (setq amb-fail +fk)
+                       (funcall +sk ,alt)))
+                  alternatives)
+           (setq amb-fail +prev-amb-fail)
+           (funcall +prev-amb-fail)))
+      `(funcall amb-fail)))
 
 ;; (print (macroexpand-1 '(amb 1 2)))
 
@@ -51,5 +53,5 @@
                         (1- next)))))
       (rec () n))))
 
-(solutions 9)
+(solutions 10)
 (print "we're done")
