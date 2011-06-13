@@ -961,12 +961,7 @@ var analyze = (function(){
     };
 
     // LAMBDA-LIST parser
-    var do_lambda_list = (function(){
-        var $REST = CL.expsym("&REST");
-        var $BODY = CL.expsym("&BODY");
-        var $KEY = CL.expsym("&KEY");
-        var $OPTIONAL = CL.expsym("&OPTIONAL");
-
+    var do_lambda_list = (function($REST, $BODY, $KEY, $OPTIONAL){
         function find(key, list) {
             key = key._name;
             while (!nullp(list)) {
@@ -1033,7 +1028,9 @@ var analyze = (function(){
         function lambda_arg_destruct(args, env, values, succeed, fail) {
             if (!listp(car(values)))
                 throw new Error("Expecting a list");
-            return inject_lambda_args(args, env, values, succeed, fail);
+            return NEXT(inject_lambda_args, args, env, car(values), function(result, fail2){
+                return NEXT(succeed, cdr(values), fail2);
+            }, fail);
         };
 
         return function do_lambda_list(args, destructuring) {
@@ -1077,7 +1074,10 @@ var analyze = (function(){
             }
             return ret;
         };
-    })();
+    })(CL.expsym("&REST"),
+       CL.expsym("&BODY"),
+       CL.expsym("&KEY"),
+       CL.expsym("&OPTIONAL"));
     // END LAMBDA-LIST parser
 
     function do_lambda(args, body, destructuring) {
