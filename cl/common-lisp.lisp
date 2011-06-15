@@ -1,5 +1,38 @@
 (jcls:set! *package* "v" (jcls:find-package "JCLS"))
 
+(def! qq-expand "f"
+  (lambda (x)
+    (jcls:def! tag "v" (car x))
+    (if (eq tag 'UNQUOTE)
+        (cadr x)
+        (if (eq tag 'UNQUOTE-SPLICE)
+            (error "Illegal splice")
+            (if (eq tag 'QUASIQUOTE)
+                (qq-expand (qq-expand (cadr x)))
+                (if (consp x)
+                    (list 'append
+                          (qq-expand-list tag)
+                          (qq-expand (cdr x)))
+                    (list 'quote x)))))))
+
+(def! qq-expand-list "f"
+  (lambda (x)
+    (jcls:def! tag "v" (car x))
+    (if (eq tag 'UNQUOTE)
+        (list 'list (cadr x))
+        (if (eq tag 'UNQUOTE-SPLICE)
+            (cadr x)
+            (if (eq tag 'QUASIQUOTE)
+                (qq-expand-list (qq-expand (cadr x)))
+                (if (consp x)
+                    (list 'list (list 'append
+                                      (qq-expand-list (car x))
+                                      (qq-expand (cdr x))))
+                    (list 'list (list 'quote x))))))))
+
+(defmacro quasiquote (node)
+  (qq-expand node))
+
 (defmacro def-f! (name args &body body)
   `(def! ,name "f" (lambda ,args ,@body)))
 
@@ -46,11 +79,10 @@
   (fork-environment
    (def! names "v" nil)
    (def! values "v" nil)
-   ;; XXX: this is quite inefficient (at compile-time)
    (def-f! recur (defs)
      (when defs
-       (set! names "v" `(,@names ,(caar defs)))
-       (set! values "v" `(,@values ,(cadar defs)))
+       (set! names "v" (cons (caar defs) names))
+       (set! values "v" (cons (cadar defs) values))
        (recur (cdr defs))))
    (recur defs)
    `((lambda ,names ,@body) ,@values)))
@@ -163,21 +195,6 @@
                                        (progn ,@(cdar cases))
                                        ,(recur (cdr cases))))))))
                 (recur cases)))))
-
-(def-efun copy-list (list)
-  (if list (cons (car list)
-                 (copy-list (cdr list)))))
-
-(labels ((a2 (a b)
-           (if a
-               (cons (car a) (a2 (cdr a) b))
-               b)))
-  (def-efun append (&rest seqs)
-    (if (cdr seqs)
-        (a2 (car seqs) (apply (function append) (cdr seqs)))
-        (if (listp (car seqs))
-            (copy-list (car seqs))
-            (car seqs)))))
 
 (def-efun foreach (list func)
   (when list

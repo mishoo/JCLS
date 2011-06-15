@@ -675,60 +675,66 @@ var analyze = (function(){
     var LAMBDA  = CL.expsym("LAMBDA")
     , PROGN = CL.expsym("PROGN");
 
-    (function(UNQUOTE, SPLICE, NSPLICE, QUASIQUOTE){
-        function Splice(list, destructive) {
-            this.list = list;
-            this.destructive = destructive;
-        };
-        function cons_splice(a, b) {
-            if (a instanceof Splice) {
-                if (nullp(a.list)) return b;
-                a = a.destructive ? a.list : copy_list(a.list);
-                set_cdr(last(a), b);
-                return a;
-            }
-            return cons(a, b);
-        };
-        function do_quasiquote(stuff) {
-            if (!consp(stuff)) return itself(stuff);
-            stuff = (function walk(node){
-                if (atom(node)) return itself(node);
-                switch (car(node)) {
-                  case UNQUOTE    : return analyze(cadr(node));
-                  case SPLICE     : return new Splice(analyze(cadr(node)));
-                  case NSPLICE    : return new Splice(analyze(cadr(node)), true);
-                  case QUASIQUOTE : return analyze(node);
-                }
-                return cons(walk(car(node)), walk(cdr(node)));
-            }(stuff));
-            return function(env, succeed, fail) {
-                return NEXT(function walk(node, succeed, fail){
-                    if (nullp(node)) {
-                        return NEXT(succeed, NIL, fail);
-                    }
-                    else if (consp(node)) {
-                        return NEXT(walk, car(node), function(first, fail2){
-                            return NEXT(walk, cdr(node), function(rest, fail3){
-                                return NEXT(succeed, cons_splice(first, rest), fail3);
-                            });
-                        });
-                    }
-                    else if (node instanceof Splice) {
-                        return NEXT(node.list, env, function(list, fail2){
-                            return NEXT(succeed, new Splice(list, node.destructive), fail2);
-                        }, fail);
-                    }
-                    else return NEXT(node, env, succeed, fail);
-                }, stuff, succeed, fail);
-            };
-        };
-        JCLS.special("QUASIQUOTE", function(ast){
-            return do_quasiquote(car(ast));
-        });
-    }(JCLS.intern("UNQUOTE"),
-      JCLS.intern("UNQUOTE-SPLICE"),
-      JCLS.intern("UNQUOTE-NSPLICE"),
-      JCLS.intern("QUASIQUOTE")));
+    // This doesn't support nested backquotes.  For the time being I
+    // implementing the QQ expander in Lisp, as described by Alan
+    // Bawden in his paper "Quasiquotation in Lisp".  Evaluating
+    // cl/common-lisp.lisp is about 5 times slower..
+    //
+    // (function(UNQUOTE, SPLICE, NSPLICE, QUASIQUOTE){
+    //     function Splice(list, destructive) {
+    //         this.list = list;
+    //         this.destructive = destructive;
+    //     };
+    //     function cons_splice(a, b) {
+    //         if (a instanceof Splice) {
+    //             if (nullp(a.list)) return b;
+    //             a = a.destructive ? a.list : copy_list(a.list);
+    //             set_cdr(last(a), b);
+    //             return a;
+    //         }
+    //         return cons(a, b);
+    //     };
+    //     function do_quasiquote(stuff) {
+    //         if (!consp(stuff)) return itself(stuff);
+    //         var level = 0;
+    //         stuff = (function walk(node){
+    //             if (atom(node)) return itself(node);
+    //             switch (car(node)) {
+    //               case UNQUOTE    : return analyze(cadr(node));
+    //               case SPLICE     : return new Splice(analyze(cadr(node)));
+    //               case NSPLICE    : return new Splice(analyze(cadr(node)), true);
+    //               case QUASIQUOTE : return analyze(node);
+    //             }
+    //             return cons(walk(car(node)), walk(cdr(node)));
+    //         }(stuff));
+    //         return function(env, succeed, fail) {
+    //             return NEXT(function walk(node, succeed, fail){
+    //                 if (nullp(node)) {
+    //                     return NEXT(succeed, NIL, fail);
+    //                 }
+    //                 else if (consp(node)) {
+    //                     return NEXT(walk, car(node), function(first, fail2){
+    //                         return NEXT(walk, cdr(node), function(rest, fail3){
+    //                             return NEXT(succeed, cons_splice(first, rest), fail3);
+    //                         });
+    //                     });
+    //                 }
+    //                 else if (node instanceof Splice) {
+    //                     return NEXT(node.list, env, function(list, fail2){
+    //                         return NEXT(succeed, new Splice(list, node.destructive), fail2);
+    //                     }, fail);
+    //                 }
+    //                 else return NEXT(node, env, succeed, fail);
+    //             }, stuff, succeed, fail);
+    //         };
+    //     };
+    //     JCLS.special("QUASIQUOTE", function(ast){
+    //         return do_quasiquote(car(ast));
+    //     });
+    // }(JCLS.intern("UNQUOTE"),
+    //   JCLS.intern("UNQUOTE-SPLICE"),
+    //   JCLS.intern("UNQUOTE-NSPLICE"),
+    //   JCLS.intern("QUASIQUOTE")));
 
     CL.special("QUOTE", function(ast){ return itself(car(ast)) });
     CL.special("IF", function(ast){ return do_if(car(ast), cadr(ast), caddr(ast)) });
@@ -1256,12 +1262,34 @@ CL.defun("ATOM", function(arg) { return atom(arg) ? T : NIL });
 CL.defun("SYMBOLP", function(arg) { return symbolp(arg) ? T : NIL });
 CL.defun("EQ", eq);
 CL.defun("CONS", cons);
-CL.defun("LISTP", function(expr){ return listp(expr) ? expr : NIL });
+CL.defun("CONSP", function(expr){ return consp(expr) ? T : NIL });
+CL.defun("LISTP", function(expr){ return listp(expr) ? T : NIL });
 CL.defun("LAST", last);
 CL.defun("LIST", function(){ return array_to_list(arguments) });
 CL.defun("EVAL", eval);
 CL.defun("RPLACA", set_car);
 CL.defun("RPLACD", set_cdr);
+
+CL.defun("COPY-LIST", copy_list);
+
+CL.defun("APPEND", function(){
+    var ret = NIL, p;
+    for (var i = 0; i < arguments.length; ++i) {
+        var list = arguments[i];
+        if (!listp(list)) {
+            if (p) set_cdr(p, list);
+            else ret = list;
+        }
+        else while (!nullp(list)) {
+            var cell = cons(car(list), NIL);
+            if (p) set_cdr(p, cell);
+            else ret = cell;
+            p = cell;
+            list = cdr(list);
+        }
+    }
+    return ret;
+});
 
 (function(counter){
     CL.defun("GENSYM", function(name){
