@@ -1279,6 +1279,7 @@ CL.defun("APPEND", function(){
         if (!listp(list)) {
             if (p) set_cdr(p, list);
             else ret = list;
+            break;
         }
         else while (!nullp(list)) {
             var cell = cons(car(list), NIL);
@@ -1286,6 +1287,18 @@ CL.defun("APPEND", function(){
             else ret = cell;
             p = cell;
             list = cdr(list);
+        }
+    }
+    return ret;
+});
+
+CL.defun("NCONC", function(){
+    var prev = arguments[0], ret = prev || NIL;
+    for (var i = 1; i < arguments.length; ++i) {
+        var current = arguments[i];
+        if (!nullp(current)) {
+            set_cdr(last(prev), arguments[i]);
+            prev = arguments[i];
         }
     }
     return ret;
