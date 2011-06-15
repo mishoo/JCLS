@@ -689,55 +689,41 @@ var analyze = (function(){
             }
             return cons(a, b);
         };
-        JCLS.special("QUASIQUOTE", function(stuff){
-            stuff = car(stuff);
+        function do_quasiquote(stuff) {
             if (!consp(stuff)) return itself(stuff);
-            var nest = 0;
-            (function walk(node){
-                while (!nullp(node)) {
-                    if (listp(car(node))) {
-                        switch (caar(node)) {
-                          case UNQUOTE:
-                          case SPLICE:
-                          case NSPLICE:
-                            if (nest == 0) {
-                                set_car(cdr(car(node)), analyze(cadar(node)));
-                            } else {
-                                --nest; walk(car(node)); ++nest;
-                            }
-                            break;
-                          case QUASIQUOTE:
-                            ++nest; walk(car(node)); --nest;
-                            break;
-                          default:
-                            walk(car(node));
-                        }
-                    }
-                    node = cdr(node);
+            stuff = (function walk(node){
+                if (atom(node)) return itself(node);
+                switch (car(node)) {
+                  case UNQUOTE    : return analyze(cadr(node));
+                  case SPLICE     : return new Splice(analyze(cadr(node)));
+                  case NSPLICE    : return new Splice(analyze(cadr(node)), true);
+                  case QUASIQUOTE : return analyze(node);
                 }
+                return cons(walk(car(node)), walk(cdr(node)));
             }(stuff));
             return function(env, succeed, fail) {
                 return NEXT(function walk(node, succeed, fail){
-                    if (consp(node)) {
-                        switch (car(node)) {
-                          case UNQUOTE: return NEXT(cadr(node), env, succeed, fail);
-                          case SPLICE: return NEXT(cadr(node), env, function(val, fail2){
-                              return NEXT(succeed, new Splice(val, false), fail2);
-                          }, fail);
-                          case NSPLICE: return NEXT(cadr(node), env, function(val, fail2){
-                              return NEXT(succeed, new Splice(val, true), fail2);
-                          }, fail);
-                        }
+                    if (nullp(node)) {
+                        return NEXT(succeed, NIL, fail);
+                    }
+                    else if (consp(node)) {
                         return NEXT(walk, car(node), function(first, fail2){
                             return NEXT(walk, cdr(node), function(rest, fail3){
                                 return NEXT(succeed, cons_splice(first, rest), fail3);
-                            }, fail2);
-                        }, fail);
-                    } else {
-                        return NEXT(succeed, node, fail);
+                            });
+                        });
                     }
+                    else if (node instanceof Splice) {
+                        return NEXT(node.list, env, function(list, fail2){
+                            return NEXT(succeed, new Splice(list, node.destructive), fail2);
+                        }, fail);
+                    }
+                    else return NEXT(node, env, succeed, fail);
                 }, stuff, succeed, fail);
             };
+        };
+        JCLS.special("QUASIQUOTE", function(ast){
+            return do_quasiquote(car(ast));
         });
     }(JCLS.intern("UNQUOTE"),
       JCLS.intern("UNQUOTE-SPLICE"),
