@@ -754,7 +754,7 @@ var analyze = (function(){
                     if (!m) return succeed(tree);
                     return NEXT(
                         m,
-                        nullp(menv) ? $environment : menv,
+                        nullp(menv) ? _GLOBAL_ENV_ : menv,
                         function(func){
                             return fapply(func, cdr(tree), succeed, fail2);
                         },
@@ -793,14 +793,14 @@ var analyze = (function(){
             var global = cadddr(ast); // only T or NIL
             if (symbolp(name)) return function(env, succeed, fail) {
                 return NEXT(value, env, function(value, fail2){
-                    (nullp(global) ? env : $environment).force(kind, name, value);
+                    (nullp(global) ? env : _GLOBAL_ENV_).force(kind, name, value);
                     return NEXT(succeed, value, fail2);
                 }, fail);
             };
             else return name = analyze(name), function(env, succeed, fail) {
                 return NEXT(name, env, function(name, fail2){
                     return NEXT(value, env, function(value, fail3){
-                        (nullp(global) ? env : $environment).force(kind, name, value);
+                        (nullp(global) ? env : _GLOBAL_ENV_).force(kind, name, value);
                         return NEXT(succeed, value, fail3);
                     }, fail2);
                 }, fail);
@@ -1101,12 +1101,12 @@ var analyze = (function(){
             return spec.call(operator, args);
         }
         // macro?
-        var mac = $environment.get("m", operator);
+        var mac = _GLOBAL_ENV_.get("m", operator);
         if (mac) {
             // XXX: HACK, BIG HACK!  The whole reader should be implemented in continuation-passing style :-\
             var ret;
             trampoline_apply(mac, [
-                $environment,
+                _GLOBAL_ENV_,
                 function(func){
                     return fapply(func, args, function(val){
                         return ret = analyze(val);
@@ -1138,8 +1138,6 @@ var analyze = (function(){
             }, fail);
         };
     };
-
-    var $environment = _GLOBAL_ENV_;
 
     return analyze;
 
