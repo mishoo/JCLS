@@ -1,38 +1,5 @@
 (jcls:set! *package* "v" (jcls:find-package "JCLS"))
 
-(def! qq-expand "f"
-  (lambda (x)
-    (jcls:def! tag "v" (car x))
-    (if (eq tag 'UNQUOTE)
-        (cadr x)
-        (if (eq tag 'UNQUOTE-SPLICE)
-            (error "Illegal splice")
-            (if (eq tag 'QUASIQUOTE)
-                (qq-expand (qq-expand (cadr x)))
-                (if (consp x)
-                    (list 'append
-                          (qq-expand-list tag)
-                          (qq-expand (cdr x)))
-                    (list 'quote x)))))))
-
-(def! qq-expand-list "f"
-  (lambda (x)
-    (jcls:def! tag "v" (car x))
-    (if (eq tag 'UNQUOTE)
-        (list 'list (cadr x))
-        (if (eq tag 'UNQUOTE-SPLICE)
-            (cadr x)
-            (if (eq tag 'QUASIQUOTE)
-                (qq-expand-list (qq-expand (cadr x)))
-                (if (consp x)
-                    (list 'list (list 'append
-                                      (qq-expand-list (car x))
-                                      (qq-expand (cdr x))))
-                    (list 'list (list 'quote x))))))))
-
-(defmacro quasiquote (node)
-  (qq-expand node))
-
 (defmacro def-f! (name args &body body)
   `(def! ,name "f" (lambda ,args ,@body)))
 

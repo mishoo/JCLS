@@ -653,7 +653,7 @@ function numberp(arg) { return typeof arg == "number" };
 function stringp(arg) { return typeof arg == "string" };
 function atom(x) { return symbolp(x) || numberp(x) || stringp(x) };
 function quote(x) { return x };
-function eq(x, y) { return (atom(x) && atom(y) && x === y) ? T : NIL };
+function eq(x, y) { return x === y ? T : NIL };
 
 function NextCont(cont) { this.cont = cont };
 function NEXT() { return new NextCont(curry.apply(null, arguments)) };
@@ -675,66 +675,54 @@ var analyze = (function(){
     var LAMBDA  = CL.expsym("LAMBDA")
     , PROGN = CL.expsym("PROGN");
 
-    // This doesn't support nested backquotes.  For the time being I
-    // implementing the QQ expander in Lisp, as described by Alan
-    // Bawden in his paper "Quasiquotation in Lisp".  Evaluating
-    // cl/common-lisp.lisp is about 5 times slower..
-    //
-    // (function(UNQUOTE, SPLICE, NSPLICE, QUASIQUOTE){
-    //     function Splice(list, destructive) {
-    //         this.list = list;
-    //         this.destructive = destructive;
-    //     };
-    //     function cons_splice(a, b) {
-    //         if (a instanceof Splice) {
-    //             if (nullp(a.list)) return b;
-    //             a = a.destructive ? a.list : copy_list(a.list);
-    //             set_cdr(last(a), b);
-    //             return a;
-    //         }
-    //         return cons(a, b);
-    //     };
-    //     function do_quasiquote(stuff) {
-    //         if (!consp(stuff)) return itself(stuff);
-    //         var level = 0;
-    //         stuff = (function walk(node){
-    //             if (atom(node)) return itself(node);
-    //             switch (car(node)) {
-    //               case UNQUOTE    : return analyze(cadr(node));
-    //               case SPLICE     : return new Splice(analyze(cadr(node)));
-    //               case NSPLICE    : return new Splice(analyze(cadr(node)), true);
-    //               case QUASIQUOTE : return analyze(node);
-    //             }
-    //             return cons(walk(car(node)), walk(cdr(node)));
-    //         }(stuff));
-    //         return function(env, succeed, fail) {
-    //             return NEXT(function walk(node, succeed, fail){
-    //                 if (nullp(node)) {
-    //                     return NEXT(succeed, NIL, fail);
-    //                 }
-    //                 else if (consp(node)) {
-    //                     return NEXT(walk, car(node), function(first, fail2){
-    //                         return NEXT(walk, cdr(node), function(rest, fail3){
-    //                             return NEXT(succeed, cons_splice(first, rest), fail3);
-    //                         });
-    //                     });
-    //                 }
-    //                 else if (node instanceof Splice) {
-    //                     return NEXT(node.list, env, function(list, fail2){
-    //                         return NEXT(succeed, new Splice(list, node.destructive), fail2);
-    //                     }, fail);
-    //                 }
-    //                 else return NEXT(node, env, succeed, fail);
-    //             }, stuff, succeed, fail);
-    //         };
-    //     };
-    //     JCLS.special("QUASIQUOTE", function(ast){
-    //         return do_quasiquote(car(ast));
-    //     });
-    // }(JCLS.intern("UNQUOTE"),
-    //   JCLS.intern("UNQUOTE-SPLICE"),
-    //   JCLS.intern("UNQUOTE-NSPLICE"),
-    //   JCLS.intern("QUASIQUOTE")));
+    // quasiquotation algorithm described by Alan Bawden in his paper "Quasiquotation in Lisp".
+    (function(UNQUOTE, SPLICE, NSPLICE, QUASIQUOTE, APPEND, QUOTE, LIST){
+        function qq_expand(x) {
+            if (consp(x)) switch (car(x)) {
+              case UNQUOTE: return cadr(x);
+              case NSPLICE:
+              case SPLICE: throw new Error("Illegal splice");
+              case QUASIQUOTE: return qq_expand(qq_expand(cadr(x)));
+              default:
+                return cons(APPEND,
+                            cons(qq_expand_list(car(x)),
+                                 cons(qq_expand(cdr(x)),
+                                      NIL)));
+            }
+            return cons(QUOTE, cons(x, NIL));
+        };
+        function qq_expand_list(x) {
+            if (consp(x)) switch (car(x)) {
+              case UNQUOTE: return cons(LIST, cons(cadr(x), NIL));
+              case NSPLICE:
+              case SPLICE: return cadr(x);
+              case QUASIQUOTE: return qq_expand_list(qq_expand(cadr(x)));
+              default:
+                return cons(LIST,
+                            cons(cons(APPEND,
+                                      cons(qq_expand_list(car(x)),
+                                           cons(qq_expand(cdr(x)),
+                                                NIL))),
+                                 NIL));
+            }
+            return cons(LIST, cons(cons(QUOTE, cons(x, NIL)), NIL));
+        };
+        JCLS.special("QUASIQUOTE", function(ast){
+            var expr = car(ast);
+            if (atom(expr)) return itself(expr);
+            return function(env, succeed, fail) {
+                return NEXT(analyze(qq_expand(expr)), env, function(val, fail2){
+                    return NEXT(succeed, val, fail2);
+                }, fail);
+            };
+        });
+    }(JCLS.intern("UNQUOTE"),
+      JCLS.intern("UNQUOTE-SPLICE"),
+      JCLS.intern("UNQUOTE-NSPLICE"),
+      JCLS.intern("QUASIQUOTE"),
+      CL.expsym("APPEND"),
+      CL.expsym("QUOTE"),
+      CL.expsym("LIST")));
 
     CL.special("QUOTE", function(ast){ return itself(car(ast)) });
     CL.special("IF", function(ast){ return do_if(car(ast), cadr(ast), caddr(ast)) });
@@ -1272,13 +1260,13 @@ CL.defun("RPLACD", set_cdr);
 
 CL.defun("COPY-LIST", copy_list);
 
-CL.defun("APPEND", function(){
-    var ret = NIL, p;
-    for (var i = 0; i < arguments.length; ++i) {
+CL.defun("APPEND", function(a, b){
+    if (!a) return NIL;
+    if (!b) return a;
+    var ret = NIL, p, n = arguments.length - 1;
+    for (var i = 0; i < n; ++i) {
         var list = arguments[i];
         if (!listp(list)) {
-            if (p) set_cdr(p, list);
-            else ret = list;
             break;
         }
         else while (!nullp(list)) {
@@ -1289,6 +1277,8 @@ CL.defun("APPEND", function(){
             list = cdr(list);
         }
     }
+    if (p)
+        set_cdr(p, arguments[i]);
     return ret;
 });
 
