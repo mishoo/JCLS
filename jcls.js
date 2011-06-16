@@ -1368,6 +1368,17 @@ CL.defun("=", function(val){
     return T;
 });
 
+CL.defun("/=", function(a, b){
+    if (arguments.length == 2) return a !== b ? T : NIL;
+    var seen = {}, n;
+    for (var i = arguments.length; --i >= 0;) {
+        n = arguments[i];
+        if (HOP(seen, n)) return NIL;
+        seen[n] = 1;
+    }
+    return T;
+});
+
 CL.defun("<", function(last){
     for (var i = 1; i < arguments.length; ++i) {
         if (arguments[i] <= last) return NIL;
