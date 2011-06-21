@@ -65,16 +65,23 @@
      ,@body)))
 
 (def-emac flet (defs &body body)
-  (labels ((recur (defs)
-             (if defs
-                 (cons `(list ',(caar defs) (lambda ,(cadar defs) ,@(cddar defs)))
-                       (recur (cdr defs))))))
-    (let ((tmp (gensym)))
-      `(let ((,tmp (list ,@(recur defs))))
-         (foreach ,tmp
-                  (lambda (def)
-                    (def! (car def) "f" (cadr def))))
-         ,@body))))
+  (fork-environment
+   (def! names "v" nil)
+   (def! values "v" nil)
+   (def-f! recur (defs)
+     (when defs
+       (set! names "v" (cons (caar defs) names))
+       (set! values "v" (cons `(lambda ,(cadar defs) ,@(cddar defs)) values))
+       (recur (cdr defs))))
+   (recur defs)
+   (let ((tmp (gensym "FLET")))
+     `((lambda (&rest ,tmp)
+         ,@(map (lambda (name)
+                  `(progn
+                     (def! ,name "f" (car ,tmp))
+                     (setq ,tmp (cdr ,tmp))))
+                names)
+         ,@body) ,@values))))
 
 (def-emac setq (&rest defs)
   (labels ((recur (defs)
@@ -183,6 +190,11 @@
                  (rec (cdr list) (1+ len))
                  len)))
     (rec list 0)))
+
+(def-efun map (func list)
+  (if list
+      (cons (funcall func (car list))
+            (map func (cdr list)))))
 
  ;;; END
 
