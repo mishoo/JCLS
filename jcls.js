@@ -1461,12 +1461,41 @@ JCLS.defun("NATIVE", function(){
     return g;
 });
 
+JCLS.defun("@", function(){
+    var g = arguments[0];
+    for (var i = 1; i < arguments.length; ++i)
+        g = g[arguments[i]];
+    return g;
+});
+
 JCLS.defun("APPLY-NATIVE", function(func, obj, args){
-    return func.apply(nullp(obj) ? global : obj, list_to_array(args));
+    if (func instanceof Function) return func.apply(nullp(obj) ? global : obj, list_to_array(args));
+    else return func[obj].apply(func, list_to_array(args));
+});
+
+JCLS.defun("CALL-NATIVE", function(func, obj){
+    var args = [].slice.call(arguments, 2);
+    if (func instanceof Function) return func.apply(nullp(obj) ? global : obj, args);
+    else return func[obj].apply(func, args);
 });
 
 JCLS.defun("MAKE-NATIVE-FUNCTION", function(func){
-    return function() { return fapply(func, array_to_list(arguments), this.succeed, this.fail) };
+    return function() {
+        var ret;
+        var a = [].map.call(arguments, function(el){
+            if (el == null || el == false) return NIL;
+            else if (el == true) return T;
+            else return el;
+        });
+        trampoline_apply(fapply, [
+            func,
+            array_to_list(a),
+            function(val){
+                ret = val;
+            }
+        ]);
+        return ret;
+    };
 });
 
 //* Reader utils
