@@ -25,8 +25,7 @@
                jcls::def-emac
                jcls::in-package
                jcls::export
-               jcls::special!
-               jcls::special?))
+               jcls::special!))
 
 (def-emac when (condition &body body)
   `(if ,condition
@@ -95,8 +94,8 @@
 
 (def-emac defparameter (name value &optional doc)
   `(progn
-     (jcls:def! ,name "v" nil t)
-     (jcls:special! ,name)
+     (def! ,name "v" nil t)
+     (special! ,name)
      (setq ,name ,value)))
 
 (def-emac prog1 (first &body body)
@@ -107,10 +106,10 @@
 
 ;; XXX: SETF required for INCF/DECF
 (def-emac incf (name &optional (delta 1))
-  `(setq ,name (1+ ,name)))
+  `(setq ,name (+ ,name ,delta)))
 
 (def-emac decf (name &optional (delta 1))
-  `(setq ,name (1- ,name)))
+  `(setq ,name (- ,name ,delta)))
 
 (defmacro def-efun (name args &body body)
   `(progn
