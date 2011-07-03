@@ -56,6 +56,11 @@ Symbol.prototype = {
     toString: function() {
         return this._fullname;
     },
+    toCamelCase: function() {
+        return this._name.toLowerCase().replace(/-([a-z])/g, function(s, p){
+            return p.toUpperCase();
+        });
+    },
     fullname: function() {
         return this._fullname;
     },
@@ -1477,6 +1482,35 @@ JCLS.defun("CALL-NATIVE", function(func, obj){
     var args = [].slice.call(arguments, 2);
     if (func instanceof Function) return func.apply(nullp(obj) ? global : obj, args);
     else return func[obj].apply(func, args);
+});
+
+JCLS.defun("NEW-NATIVE", function(func){
+    var args = [].slice.call(arguments, 1);
+    if (typeof func == "string") func = global[func];
+    // XXX: hacky stuff
+    var that = {};
+    that.__proto__ = func.prototype;
+    func.apply(that, args);
+    return that;
+});
+
+JCLS.defun("ALIST-JS", function(alist){
+    var hash = {}
+    eachlist(alist, function(el){
+        hash[car(el)] = cdr(el);
+    });
+    return hash;
+});
+
+JCLS.defun("JS-ALIST", function(hash){
+    var ret = NIL, p;
+    for (var i in hash) if (HOP(hash, i)) {
+        var cell = cons(cons(i, hash[i]), NIL);
+        if (p) set_cdr(p, cell);
+        else ret = cell;
+        p = cell;
+    }
+    return ret;
 });
 
 JCLS.defun("MAKE-NATIVE-FUNCTION", function(func){
