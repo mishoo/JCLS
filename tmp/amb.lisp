@@ -6,11 +6,6 @@
   (lambda ()
     (print "amb tree exhausted")))
 
-(defun map (func list)
-  (if list
-      (cons (funcall func (car list))
-            (map func (cdr list)))))
-
 (defmacro amb (&rest alternatives)
   (if alternatives
       `(let ((+prev-amb-fail amb-fail))
