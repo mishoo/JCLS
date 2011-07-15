@@ -17,14 +17,8 @@ function eval_file(filename) {
         );
 };
 
-try {
-
         // load cl/common-lisp.lisp
         eval_file(path.join(path.dirname(__filename), "cl/common-lisp.lisp"));
 
         if (process.argv[2])
                 eval_file(process.argv[2]);
-
-} catch(ex) {
-        console.log(ex);
-}

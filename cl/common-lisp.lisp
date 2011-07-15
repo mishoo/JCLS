@@ -27,6 +27,8 @@
                jcls::export
                jcls::special!))
 
+(export '(in-package export))
+
 (def-emac when (condition &body body)
   `(if ,condition
        (progn ,@body)))
@@ -194,6 +196,33 @@
   (if list
       (cons (funcall func (car list))
             (map func (cdr list)))))
+
+(def-emac push (obj place)
+  ;; XXX: setf needed
+  `(setq ,place (cons ,obj ,place)))
+
+ ;;; packages
+
+(def-emac make-package (&key nicknames use)
+  `(jcls:make-package ,use ,nicknames))
+
+(def-emac defpackage (name &body options)
+  (let ((nicknames nil)
+        (use nil)
+        (pak (gensym "DEFPACKAGE")))
+    (foreach options
+             (lambda (opt)
+               (case (car opt)
+                 (:nicknames
+                  (setq nicknames (append nicknames (cdr opt))))
+                 (:use
+                  (setq use (append use (cdr opt)))))))
+    `(let ((,pak (jcls:make-package ',name ',use ',nicknames)))
+       ,@(map (lambda (opt)
+                (case (car opt)
+                  (:export `(export ,(cdr opt)))))
+              options)
+       ,pak)))
 
  ;;; END
 

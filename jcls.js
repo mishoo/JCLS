@@ -45,7 +45,11 @@ function pushnew(a, el) {
 function Symbol(pack, name) {
     this._package = pack;
     this._name = name;
-    this._fullname = (this._package ? this._package._name + "::": "#:") + this._name;
+    this._fullname = (this._package
+                      ? this._package._name == "KEYWORD"
+                      ? ":"
+                      : this._package._name + "::"
+                      : "#:") + this._name;
     this._plist = {};
     this._special_var = false;
     this._special_op = null;
@@ -657,8 +661,6 @@ function symbolp(arg) { return arg instanceof Symbol };
 function numberp(arg) { return typeof arg == "number" };
 function stringp(arg) { return typeof arg == "string" };
 function atom(x) { return symbolp(x) || numberp(x) || stringp(x) };
-function quote(x) { return x };
-function eq(x, y) { return x === y ? T : NIL };
 
 function NextCont(cont) { this.cont = cont };
 function NEXT() { return new NextCont(curry.apply(null, arguments)) };
@@ -1251,7 +1253,7 @@ var caar = LST.caar
 
 CL.defun("ATOM", function(arg) { return atom(arg) ? T : NIL });
 CL.defun("SYMBOLP", function(arg) { return symbolp(arg) ? T : NIL });
-CL.defun("EQ", eq);
+CL.defun("EQ", function(x, y) { return x === y ? T : NIL });
 CL.defun("CONS", cons);
 CL.defun("CONSP", function(expr){ return consp(expr) ? T : NIL });
 CL.defun("LISTP", function(expr){ return listp(expr) ? T : NIL });
@@ -1266,8 +1268,8 @@ CL.defun("COPY-LIST", copy_list);
 CL.defun("APPEND", function(a, b){
     if (!a) return NIL;
     if (!b) return a;
-    var ret = NIL, p, n = arguments.length - 1;
-    for (var i = 0; i < n; ++i) {
+    var ret = NIL, p, n = arguments.length - 1, i = 0;
+    for (; i < n; ++i) {
         var list = arguments[i];
         if (!listp(list)) {
             break;
@@ -1280,9 +1282,11 @@ CL.defun("APPEND", function(a, b){
             list = cdr(list);
         }
     }
-    if (p)
+    if (p) {
         set_cdr(p, arguments[i]);
-    return ret;
+        return ret;
+    }
+    else return arguments[i];
 });
 
 CL.defun("NCONC", function(){
@@ -1292,6 +1296,7 @@ CL.defun("NCONC", function(){
         if (!nullp(current)) {
             set_cdr(last(prev), arguments[i]);
             prev = arguments[i];
+            if (nullp(ret)) ret = prev;
         }
     }
     return ret;
