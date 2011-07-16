@@ -2,6 +2,12 @@
 
 ;; http://www.ccs.neu.edu/home/dorai/t-y-scheme/t-y-scheme-Z-H-16.html
 
+(defmacro delay ((timeout) &body body)
+  `(jcls:call-native (jcls:native "setTimeout") nil
+                     (jcls:make-native-function (lambda ()
+                                                  ,@body))
+                     ,timeout))
+
 (defparameter amb-fail
   (lambda ()
     (print "amb tree exhausted")))
@@ -20,22 +26,24 @@
       `(funcall amb-fail)))
 
 ;; +-1 +-2 +-3 +-4 ... +- N == 1 --- figure out the + and - signs.
-(flet ((solutions (n &optional (sum 1))
-         (with-cc (k)
-           (setq amb-fail k)
-           (labels ((required-sum? (numbers)
-                      (= sum (apply (function +) numbers)))
-                    (rec (numbers next)
-                      (if (= next 0)
-                          (progn
-                            (when (required-sum? numbers)
-                              (print numbers))
-                            (amb))
-                          (rec (cons (amb next (- next)) numbers)
-                               (1- next)))))
-             (rec () n)))))
-  (solutions 9)
-  (print "we're done"))
+(defun solutions (n &optional (sum 1))
+  (with-cc (k)
+    (setq amb-fail k)
+    (labels ((required-sum? (numbers)
+               (= sum (apply (function +) numbers)))
+             (rec (numbers next)
+               (if (= next 0)
+                   (progn
+                     (when (required-sum? numbers)
+                       (print numbers))
+                     (amb))
+                   (delay (0)
+                     (rec (cons (amb next (- next)) numbers)
+                          (1- next))))))
+      (rec () n)))
+  nil)
+
+(solutions 9)
 
 ;; (flet ((assert (condition)
 ;;          (unless condition (amb)))

@@ -1202,6 +1202,8 @@ exports.eval = eval;
 exports.eval_string = eval_string;
 exports.lisp_input_stream = lisp_input_stream;
 exports.analyze = analyze;
+exports.NIL = NIL;
+exports.T = T;
 
 /* -----[ Other functions ]----- */
 
@@ -1434,7 +1436,7 @@ JCLS.defun("EXPORT", function(syms, pack){
     if (pack == null) pack = _PACKAGE_.value();
     maplist(as_list(syms), function(s){
         // XXX-E: errors should be signaled
-        pack.expsym(s.name());
+        pack.expsym(as_name(s));
     });
     return T;
 });

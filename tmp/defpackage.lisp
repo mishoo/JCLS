@@ -1,10 +1,17 @@
 (jcls:print (macroexpand-1 '(defpackage foo
                              (:use :common-lisp)
                              (:use :jcls)
-                             (:export 'moo))))
+                             (:export "MOO"))))
 
-(defpackage foo (:use :cl :jcls))
+(defpackage foo
+  (:use :cl :jcls)
+  (:export "TEST"))
 
 (in-package :foo)
 
-(print "This seems to work")
+(defun test ()
+  (print "This is FOO:TEST"))
+
+(in-package :cl-user)
+
+(foo:test)

@@ -220,7 +220,7 @@
     `(let ((,pak (jcls:make-package ',name ',use ',nicknames)))
        ,@(map (lambda (opt)
                 (case (car opt)
-                  (:export `(export ,(cdr opt)))))
+                  (:export `(export (list ,@(cdr opt)) ,pak))))
               options)
        ,pak)))
 
