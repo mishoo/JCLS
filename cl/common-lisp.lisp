@@ -220,11 +220,14 @@
     `(let ((,pak (jcls:make-package ',name ',use ',nicknames)))
        ,@(map (lambda (opt)
                 (case (car opt)
-                  (:export `(export (list ,@(cdr opt)) ,pak))))
+                  (:export
+                   `(export (list ,@(cdr opt)) ,pak))
+                  (:import-from
+                   (destructuring-bind (source &rest names) (cdr opt)
+                     (setq source (jcls:find-package source))
+                     `(jcls:import ',(map (lambda (name)
+                                            (jcls:find-symbol name source))
+                                          names)
+                                   ,pak)))))
               options)
        ,pak)))
-
- ;;; END
-
-(in-package :cl-user)
-t

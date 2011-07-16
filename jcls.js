@@ -1463,6 +1463,11 @@ JCLS.defun("FIND-PACKAGE", function(name){
     return Package.get(as_name(name));
 });
 
+JCLS.defun("FIND-SYMBOL", function(name, pack){
+    if (pack == null) pack = _PACKAGE_.value();
+    return pack.find_symbol(as_name(name));
+});
+
 JCLS.defun("USE-PACKAGE", function(names, pack){
     if (pack == null) pack = _PACKAGE_.value();
     maplist(as_list(names), function(name){
