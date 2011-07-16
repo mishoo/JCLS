@@ -772,6 +772,17 @@ var analyze = (function(){
         };
     });                         // my brain's on fire.
 
+    CL.special("DESTRUCTURING-BIND", function(ast){
+        var args = do_lambda_list(car(ast), true);
+        var values = analyze(cadr(ast));
+        var body = do_sequence(cddr(ast));
+        return function(env, succeed, fail) {
+            return NEXT(values, env, function(values, fail2){
+                return NEXT(fapply, [ args, body, env ], values, succeed, fail2);
+            }, fail);
+        };
+    });
+
     // to manipulate the environment
     {
         JCLS.special("FORK-ENVIRONMENT", function(body){
@@ -1141,7 +1152,7 @@ var analyze = (function(){
         values = maplist(values, analyze);
         return function(env, succeed, fail){
             return NEXT(get_args, values, env, function(values, fail2){
-                return NEXT(fapply, [ args, body, env ], values, succeed, fail);
+                return NEXT(fapply, [ args, body, env ], values, succeed, fail2);
             }, fail);
         };
     };
