@@ -17,8 +17,10 @@ function eval_file(filename) {
         );
 };
 
-        // load cl/common-lisp.lisp
-        eval_file(path.join(path.dirname(__filename), "cl/common-lisp.lisp"));
-
+// load cl/common-lisp.lisp
+eval_file(path.join(path.dirname(__filename), "cl/common-lisp.lisp"));
+eval_file(path.join(path.dirname(__filename), "cl/javascript.lisp"));
+JCLS.eval_string("(in-package :cl-user)", function(){
         if (process.argv[2])
                 eval_file(process.argv[2]);
+}, function(){});

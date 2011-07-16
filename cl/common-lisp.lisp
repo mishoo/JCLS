@@ -25,9 +25,10 @@
                jcls::def-emac
                jcls::in-package
                jcls::export
+               jcls::intern
                jcls::special!))
 
-(export '(in-package export))
+(export '(in-package export intern))
 
 (def-emac when (condition &body body)
   `(if ,condition

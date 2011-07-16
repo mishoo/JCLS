@@ -105,7 +105,7 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
                         var start = new Date().getTime();
                         JCLS.eval_string(expr, function(val){
                                 jcls_log("==> " + JCLS.write_ast_to_string(val)
-                                         + " (" + ((new Date().getTime() - start) / 1000).toFixed(3) + "s)");
+                                         + " <== in " + ((new Date().getTime() - start) / 1000).toFixed(3) + "s");
                         }, function(val){
                                 jcls_log("**> " + JCLS.write_ast_to_string(val));
                         });
@@ -167,3 +167,33 @@ function load(url, cont) {
         xhr.open("GET", url);
         xhr.send();
 };
+
+function load_eval_lisp_seq(files, next) {
+        var n = files.length, a = [], i = 0;
+        while (i < n) {
+                load(files[i], (function(i){
+                        return function(code) {
+                                a[i] = code;
+                                if (--n == 0) {
+                                        a.foreach(function(code) {
+                                                JCLS.eval_string(code, function(val){
+                                                        // success
+                                                }, function(){
+                                                        // failure
+                                                });
+                                        });
+                                        next();
+                                }
+                        };
+                })(i++));
+        }
+};
+
+load("../jcls.js", function(code){
+        new Function("exports", "global", code).call(window, window.JCLS = {}, window);
+        load_eval_lisp_seq([
+                "../cl/common-lisp.lisp",
+                "../cl/javascript.lisp",
+                "./ymacs.lisp"
+        ], make_desktop);
+});

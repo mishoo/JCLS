@@ -2,12 +2,6 @@
 
 ;; http://www.ccs.neu.edu/home/dorai/t-y-scheme/t-y-scheme-Z-H-16.html
 
-(defmacro delay ((timeout) &body body)
-  `(jcls:call-native (jcls:native "setTimeout") nil
-                     (jcls:make-native-function (lambda ()
-                                                  ,@body))
-                     ,timeout))
-
 (defparameter amb-fail
   (lambda ()
     (print "amb tree exhausted")))
@@ -37,13 +31,12 @@
                      (when (required-sum? numbers)
                        (print numbers))
                      (amb))
-                   (delay (0)
-                     (rec (cons (amb next (- next)) numbers)
-                          (1- next))))))
+                   (rec (cons (amb next (- next)) numbers)
+                        (1- next)))))
       (rec () n)))
   nil)
 
-(solutions 9)
+(solutions 10)
 
 ;; (flet ((assert (condition)
 ;;          (unless condition (amb)))

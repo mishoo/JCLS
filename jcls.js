@@ -1432,6 +1432,29 @@ CL.defun(">=", function(last){
     return T;
 });
 
+/* -----[ some string utilities ]----- */
+
+JCLS.defun("STRING+", function(sep){
+    return [].slice.call(arguments).reduce(function(a, b){ return a + b }, "");
+});
+
+JCLS.defun("JS-NAME-TO-LISP", function(name){
+    name = as_name(name).replace(/_/g, "-");
+    if (name == name.toUpperCase()) return "*" + name + "*";
+    return name.replace(/(^|[a-z])([A-Z])/g, function(str, a, b) {
+        return a + "-" + b;
+    }).toUpperCase();
+});
+
+JCLS.defun("LISP-NAME-TO-JS", function(name){
+    name = as_name(name);
+    var m;
+    if ((m = /^\*(.*)\*$/.exec(name))) return m[1].toUpperCase().replace(/-/g, "_");
+    return name.toLowerCase().replace(/-([a-z])/g, function(str, p){
+        return p.toUpperCase();
+    });
+});
+
 /* -----[ utilities on which we'll build further functions in :CL ]----- */
 
 JCLS.defun("IMPORT", function(syms, pack){
@@ -1474,6 +1497,11 @@ JCLS.defun("USE-PACKAGE", function(names, pack){
         pack.use_package(as_name(name));
     });
     return T;
+});
+
+JCLS.defun("INTERN", function(name, pack){
+    if (pack == null) pack = _PACKAGE_.value();
+    return pack.find_or_intern(as_name(name));
 });
 
 JCLS.defun("PRINT", function(){
