@@ -202,24 +202,44 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
                         })
                 };
         });
-});
 
-Ymacs_Buffer.newMode("jcls_mode", function(){
-        this.cmd("lisp_mode", true);
-        this.pushKeymap(Ymacs_Keymap_JCLS());
-        return function() {
-                this.popKeymap(Ymacs_Keymap_JCLS());
-                this.cmd("lisp_mode", false);
-        };
-});
+        Ymacs_Buffer.newMode("jcls_mode", function(){
+                this.cmd("lisp_mode", true);
+                this.pushKeymap(Ymacs_Keymap_JCLS());
+                var save_modeline = this.getq("modeline_custom_handler");
+                this.setq("modeline_custom_handler", function(){
+                        this.preventUpdates();
+                        var ret = [ "JCLS" ];
+                        var pak = find_package(this, this.point());
+                        if (pak) {
+                                pak = pak.replace(/^\(in-/, "(jcls:find-"); // that's a pervert hack
+                        } else {
+                                pak = "*PACKAGE*";
+                        }
+                        JCLS.eval_string("(jcls:@ " + pak + " \"_name\")", function(name){
+                                pak = name;
+                        });
+                        ret.push(pak);
+                        this.resumeUpdates();
+                        return ret.join(" ");
+                });
+                return function() {
+                        this.popKeymap(Ymacs_Keymap_JCLS());
+                        this.cmd("lisp_mode", false);
+                        this.setq("modeline_custom_handler", save_modeline);
+                };
+        });
 
-Ymacs_Buffer.newMode("jcls_repl_mode", function(){
-        this.cmd("jcls_mode");
-        this.pushKeymap(Ymacs_Keymap_JCLS_REPL());
-        return function() {
-                this.popKeymap(Ymacs_Keymap_JCLS_REPL());
-                this.cmd("jcls_mode", false);
-        };
+        Ymacs_Buffer.newMode("jcls_repl_mode", function(){
+                this.cmd("jcls_mode");
+                this.pushKeymap(Ymacs_Keymap_JCLS_REPL());
+                this.setq("modeline_custom_handler", null);
+                return function() {
+                        this.popKeymap(Ymacs_Keymap_JCLS_REPL());
+                        this.cmd("jcls_mode", false);
+                };
+        });
+
 });
 
 var THE_EDITOR;
