@@ -1090,7 +1090,9 @@ var analyze = (function(){
         body = do_sequence(body);
         return function(env, succeed, fail) {
             if (nullp(env)) env = _GLOBAL_ENV_;
-            return NEXT(succeed, [ args, body, env ], fail);
+            var func = [ args, body, env ];
+            func.toString = function(){ return "<FUNCTION>" };
+            return NEXT(succeed, func, fail);
         };
     };
 

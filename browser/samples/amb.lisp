@@ -1,7 +1,9 @@
 ;;; the nondeterministic operator (amb)
 
-;; amb implementation as described in “Teach Yourself Scheme in Fixnum Days”
-;; http://www.ccs.neu.edu/home/dorai/t-y-scheme/t-y-scheme-Z-H-16.html#node_sec_14.2
+;; Note that this file defines functions, but it doesn't call them.
+;; Go below and uncomment whatever you need to run.  My suggestion is
+;; to evaluate the whole buffer once, and then go and uncomment
+;; expressions that you want to run and press C-M-x on them.
 
 (defpackage test-amb
   (:use :cl)
@@ -10,9 +12,20 @@
 
 (in-package :test-amb)
 
+
+
+;; -----------------------------------------------------------------
+
 (defparameter amb-fail
   (lambda ()
     (log "amb tree exhausted")))
+
+;; Given a set of values, the amb operator picks one such that the
+;; rest of the program is successful.  If this is not possible, it
+;; calls amb-fail (which by default prints "amb tree exhausted").
+
+;; This implementation follows the description here:
+;; http://www.ccs.neu.edu/home/dorai/t-y-scheme/t-y-scheme-Z-H-16.html#node_sec_14.2
 
 (defmacro amb (&rest alternatives)
   (if alternatives
@@ -25,7 +38,7 @@
                   alternatives)
            (setq amb-fail +prev-amb-fail)
            (delay (0)
-             (funcall +prev-amb-fail nil))))
+                  (funcall +prev-amb-fail nil))))
       `(funcall amb-fail nil)))
 
 ;; note above that we're delaying the previous continuation (using
@@ -33,14 +46,19 @@
 ;; handle events, so that you can continue to use the editor, while
 ;; this program runs.
 
+
+
 ;; -----------------------------------------------------------------
 
 ;; Problem: given numbers 1..N, place + or - signs between them such
 ;; that the sum is 1.  The following function uses the amb operator to
-;; chose between X, -X (where X is the current number).  When we
-;; picked N numbers, we test their sum; if it's a solution, print it,
-;; otherwise call amb without arguments (which fails and backtracks to
-;; the previous choice point).
+;; chose between X and -X (where X is the current number).  When we
+;; picked N numbers, we test their sum; if we have a solution, print
+;; it; next, call amb without arguments (which fails and backtracks to
+;; the previous choice point).  It'll print all solutions.
+
+;; [yes, this implementation is inefficient; the point is to
+;; demonstrate `amb'.]
 
 (defun sumis (n &optional (sum 1))
   (with-cc (k)
@@ -59,32 +77,19 @@
         (rec () n))))
   (log (js:strcat "Finished for n = " n)))
 
-;; <btw>
-;;   This implementation is really gross; the solution can be optimized
-;;   if we notice that:
-;;
-;;   let A = sum of numbers where we pick plus
-;;   let B = sum of numbers where we pick minus:
-;;
-;;      A - B = 1
-;;      A + B = N(N+1) / 2
-;;   ==>
-;;      A = (N(N+1)+2) / 4
-;;
-;;   Therefore (1) we only have solutions if (N(N+1)+2) mod 4 = 0 and
-;;   (2) we know in advance the sum of the numbers where we pick "+",
-;;   which would allow us to avoid examining many unproductive parts of
-;;   the tree.
-;; </btw>
-
-;; The calls below will still run sequentially, because the
-;; continuation of each line is to move to the next line.  However,
-;; they can run in parallel -- to see this press C-M-x on each line.
-;; That would invoke the evaluator on each expression alone.
+;; If you want to try running stuff in parallel, uncomment the
+;; following 3 lines and (instead of evaluating the whole buffer)
+;; press C-M-x on each of them.  Evaluating the whole buffer will
+;; still run them sequentially -- that is the beauty of having
+;; first-class continuations: even though (amb) is asynchronous
+;; (because it uses setTimeout to backtrack) the program flow is
+;; sequential.
 
 ;; (sumis 10)
 ;; (sumis 6)
 ;; (sumis 9)
+
+
 
 ;; -----------------------------------------------------------------
 
@@ -110,7 +115,7 @@
      (assert (not (find-house houses ,type tmp)))
      tmp))
 
-;; a house is represented by a list of 5 elements -- natioinality,
+;; a house is represented as a list of 5 elements -- nationality,
 ;; beverage, tobacco brand, pet and color (in this order).  This
 ;; function retrieves the requested property of a house.
 (defun house-prop (prop house)
@@ -151,17 +156,18 @@
 ;; macros defined above.
 (defun who-owns-the-fish ()
   (labels ((add (houses index)
-             (let ((nat (pick :nationality  'british 'swedish 'danish 'norwegian 'german))
-                   (bev (pick :beverage     'tea 'milk 'coffee 'beer 'water))
-                   (tob (pick :tobacco      'pallmall 'dunhill 'marlboro 'winfield 'rothmans))
-                   (pet (pick :pet          'dogs 'cats 'horses 'birds 'fish))
-                   (col (pick :color        'red 'green 'white 'yellow 'blue)))
+             (let ((nat (pick :nationality  'british  'swedish 'danish   'norwegian 'german))
+                   (col (pick :color        'red      'green   'white    'yellow    'blue))
+                   (bev (pick :beverage     'tea      'milk    'coffee   'beer      'water))
+                   (tob (pick :tobacco      'pallmall 'dunhill 'marlboro 'winfield  'rothmans))
+                   (pet (pick :pet          'dogs     'cats    'horses   'birds     'fish)))
                (iff (eq nat 'british) (eq col 'red))
                (iff (eq nat 'swedish) (eq pet 'dogs))
                (iff (eq nat 'danish) (eq bev 'tea))
-               (iff (eq col 'white) (and (> index 0)
-                                         (eq 'green
-                                             (house-prop :color (nth (1- index) houses)))))
+               (iff (eq col 'white)
+                    (and (> index 0)
+                         (eq 'green
+                             (house-prop :color (nth (1- index) houses)))))
                (iff (eq col 'green) (eq bev 'coffee))
                (iff (eq tob 'pallmall) (eq pet 'birds))
                (iff (eq col 'yellow) (eq tob 'dunhill))
@@ -171,7 +177,7 @@
                (iff (eq nat 'german) (eq tob 'rothmans))
                (let* ((h (list nat bev tob pet col))
                       (houses (append houses (list h))))
-                 (log houses)
+                 (log houses) ; log something so we don't look like we're frozen.
                  (if (= index 4)
                      (progn
                        (neighbors houses :tobacco 'marlboro :pet 'cats)
@@ -184,11 +190,8 @@
                      (add houses (1+ index)))))))
     (add () 0)))
 
-;; It takes 95s in Chrome.  Uncomment the following line and press
-;; C-M-x inside it to run.  Note that it logs the list of houses
-;; passing the first round of conditions (log houses), so you know
-;; it's not frozen ;-).  When the solution is found it'll display
-;; SOLUTION and return it.
+;; takes around 10s in Chrome, 13s in FF.  We could improve the speed
+;; by rearranging some assertions.
 ;;
 ; (who-owns-the-fish)
 ;;

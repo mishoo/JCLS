@@ -1,6 +1,9 @@
 ;;; Using continuations to implement a "sleep" function based on setTimeout
 ;;; -----------------------------------------------------------------------
 
+;; Read this for a very good introduction to continuations:
+;; http://www.ccs.neu.edu/home/dorai/t-y-scheme/t-y-scheme-Z-H-15.html
+
 (defun sleep (milliseconds)
   (jcls:call/cc (lambda (k)
                   (jcls:call-native (jcls:native "setTimeout") nil
@@ -20,3 +23,4 @@
   (sleep2 1000)
   (ymacs:log "bar"))
 
+;; also see amb.lisp for more advanced use of continuations

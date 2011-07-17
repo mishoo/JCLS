@@ -97,6 +97,19 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
                         // XXX: this is pretty sucky
                         expr = JCLS.write_ast_to_string(expr);
                         eval(this, "(macroexpand-1 '" + expr + ")");
+                }),
+                jcls_eval_buffer: Ymacs_Interactive(function(){
+                        eval(this, this.getCode());
+                }),
+                jcls_eval_sexp: Ymacs_Interactive(function(){
+                        var points = find_toplevel_sexp(this, true);
+                        var expr = this.cmd("buffer_substring", points[0], points[1]);
+                        (function(){
+                                eval(this, expr);
+                        }).delayed(1, this);
+                }),
+                jcls_eval_region: Ymacs_Interactive("r", function(begin, end){
+                        eval(this, this.cmd("buffer_substring", begin, end));
                 })
         });
 
@@ -115,21 +128,11 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
         };
 
         D.KEYS = {
-                "C-c C-c && C-M-x": function() {
-                        var points = find_toplevel_sexp(this, true);
-                        var expr = this.cmd("buffer_substring", points[0], points[1]);
-                        (function(){
-                                eval(this, expr);
-                        }).delayed(1, this);
-                },
-                "C-c C-k": function() {
-                        eval(this, this.getCode());
-                },
-                "C-c C-r": Ymacs_Interactive("r", function(begin, end){
-                        eval(this, this.cmd("buffer_substring", begin, end));
-                }),
-                "C-c M-o && C-c DELETE && C-c C-DELETE": "jcls_clear_output",
-                "C-c ENTER": "jcls_macroexpand_1"
+                "C-c C-c && C-M-x"                      : "jcls_eval_sexp",
+                "C-c C-k"                               : "jcls_eval_buffer",
+                "C-c C-r"                               : "jcls_eval_region",
+                "C-c M-o && C-c DELETE && C-c C-DELETE" : "jcls_clear_output",
+                "C-c ENTER"                             : "jcls_macroexpand_1"
         };
 });
 
@@ -159,6 +162,23 @@ function make_desktop() {
         var menu = new DlHMenu({ parent: toolbar });
 
         make_samples_menu(menu);
+
+        menu.addSeparator("wide-separator");
+        function btn(label, action) {
+                var b = new DlButton({ parent: menu, label: label });
+                b.addEventListener("onClick", function(){
+                        THE_EDITOR.focus();
+                        action();
+                });
+                return b;
+        };
+
+        function buffer(){ return THE_EDITOR.getActiveBuffer() };
+
+        btn("Eval buffer", function(){ buffer().cmd("jcls_eval_buffer") });
+        btn("Eval expression", function(){ buffer().cmd("jcls_eval_sexp") });
+        btn("Eval selection", function(){ buffer().cmd("jcls_eval_region") });
+        btn("Macroexpand", function(){ buffer().cmd("jcls_macroexpand_1") });
 
         var ymacs = THE_EDITOR = new Ymacs_JCLS({ buffers: [], lineNumbers: true });
         ymacs.setColorTheme([ "light", "standard" ]);
