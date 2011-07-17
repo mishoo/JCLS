@@ -32,7 +32,7 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
                 if (parser) {
                         var lc = { line: rc.row, col: rc.col };
                         var p = getPP(parser).grep("closed").mergeSort(compareRowCol).grep_first(function(p){
-                                return compareRowCol(p, lc) < 0 && compareRowCol(p.closed, lc) >= 0;
+                                return compareRowCol(p, lc) <= 0 && compareRowCol(p.closed, lc) >= 0;
                         });
                         if (p == null) p = getPP(parser).grep("closed").mergeSort(function(a, b){
                                 return compareRowCol(a.closed, b.closed);
@@ -59,12 +59,14 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
         function find_package(buffer, start) {
                 return buffer.cmd("save_excursion", function(){
                         this.cmd("goto_char", start);
-                        if (this.cmd("search_backward", "\n(in-package")) {
-                                this.cmd("forward_char");
+                        if (this.cmd("search_backward", "(in-package")) {
                                 var a = this.point();
-                                if (this.cmd("search_forward", ")")) {
-                                        var b = this.point();
-                                        return this.cmd("buffer_substring", a, b);
+                                var txt = this.cmd("buffer_substring", 0, a);
+                                if (/(^|\n)\s*$/.test(txt)) {
+                                        if (this.cmd("search_forward", ")")) {
+                                                var b = this.point();
+                                                return this.cmd("buffer_substring", a, b);
+                                        }
                                 }
                         }
                 });
@@ -109,8 +111,7 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
                         var expr = JCLS.read(stream, false, null);
                         if (expr == null)
                                 throw new Ymacs_Exception("Couldn't read Lisp expression starting at point");
-                        // XXX: this is pretty sucky
-                        expr = JCLS.write_ast_to_string(expr);
+                        expr = this.cmd("buffer_substring", point, point + stream.pos);
                         eval(this, "(macroexpand-1 '" + expr + ")");
                 }),
                 jcls_eval_buffer: Ymacs_Interactive(function(){
@@ -220,7 +221,7 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
                                 if (name)
                                         pak = name;
                                 else
-                                        pak = "(package not defined)";
+                                        pak = "<span style='color:red'>(package not defined)</span>";
                         });
                         ret.push(pak);
                         this.resumeUpdates();
@@ -253,6 +254,8 @@ function get_output_buffer() {
         if (!out) {
                 var frame = ed.getActiveFrame(), buf = ed.getActiveBuffer();
                 out = ed.createBuffer({ name: "*jcls*" });
+                out.setCode(";; Take this REPL, brother, and may it serve you well.")
+                out.cmd("end_of_buffer");
                 out.cmd("jcls_repl_mode");
                 buf.cmd("split_frame_vertically", "70%");
                 buf.cmd("other_frame");
@@ -297,7 +300,7 @@ function make_desktop() {
         btn("Eval buffer", function(){ buffer().cmd("jcls_eval_buffer") });
         btn("Eval expression", function(){ buffer().cmd("jcls_eval_sexp") });
         btn("Eval selection", function(){ buffer().cmd("jcls_eval_region") });
-        btn("Macroexpand", function(){ buffer().cmd("jcls_macroexpand_1") });
+        btn("Macroexpand", function(){ buffer().cmd("jcls_macroexpand_1", buffer().point()) });
 
         menu.addSeparator("wide-separator");
 
@@ -305,7 +308,8 @@ function make_desktop() {
         btn("Paste from system clipboard", function(){ buffer().cmd("yank_from_operating_system") });
 
         var ymacs = THE_EDITOR = new Ymacs_JCLS({ buffers: [], lineNumbers: true });
-        ymacs.setColorTheme([ "light", "standard" ]);
+        //ymacs.setColorTheme([ "light", "standard" ]);
+        ymacs.setColorTheme([ "dark", "mishoo" ]);
         ymacs.getActiveBuffer().cmd("jcls_mode");
 
         layout.packWidget(toolbar, { pos: "top" });
@@ -329,6 +333,8 @@ function make_samples_menu(parent) {
         menu.addEventListener("onSelect", function(file){
                 load(file, function(code){
                         var ymacs = THE_EDITOR;
+                        if (ymacs.getActiveBuffer() == get_output_buffer())
+                                get_output_buffer().cmd("other_frame");
                         var buf = ymacs.getBuffer(file);
                         if (!buf) {
                                 buf = ymacs.createBuffer({ name: file });

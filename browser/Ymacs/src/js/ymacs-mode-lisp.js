@@ -370,6 +370,10 @@ return return-from setq multiple-value-call".qw().toHash();
                                                         // "with" macros usually take one argument, then &body
                                                         formArgs = "1*";
                                                 }
+                                                if (!formArgs && /^def/.test(currentForm)) {
+                                                        // "with" macros usually take one argument, then &body
+                                                        formArgs = "2*";
+                                                }
                                                 if (!formArgs) try {
                                                         if (Object.HOP(LOCAL_BODYDEF, $backList[$backList.length - 2][0].id)) {
                                                                 formArgs = "1*";

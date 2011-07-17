@@ -215,7 +215,7 @@ var CL_USER = new Package("CL-USER", {
     use: [ "CL" ]
 });
 
-var _PACKAGE_ = CL.expsym("*PACKAGE*").special_var(true).bind(CL_USER);
+var _PACKAGE_ = CL.expsym("*PACKAGE*").special_var(true).bind(JCLS);
 
 /* -----[ basics ]----- */
 
@@ -466,7 +466,7 @@ function ignore(stream) {
 };
 
 function ignore_comment(stream) {
-    stream.read_while(function(ch){ return ch != "\n" });
+    stream.read_while(function(ch){ return ch && ch != "\n" });
 };
 
 var DOT = CL.expsym(".");   // XXX: this is a gross hack.

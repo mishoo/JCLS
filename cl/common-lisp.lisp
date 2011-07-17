@@ -28,7 +28,7 @@
                jcls::intern
                jcls::special!))
 
-(export '(in-package export intern))
+(export '(export intern in-package))
 
 (def-emac when (condition &body body)
   `(if ,condition
@@ -38,10 +38,13 @@
   (fork-environment
    (def-f! recur (defs)
      (if defs
-         (cons `(def! ,(caar defs) "v" ,(cadar defs))
+         (cons (if (listp (car defs))
+                   `(def! ,(caar defs) "v" ,(cadar defs))
+                   `(def! ,(car defs) "v" nil))
                (recur (cdr defs)))))
    `(fork-environment
      ,@(recur defs)
+     nil
      ,@body)))
 
 (def-emac let (defs &body body)
@@ -50,11 +53,16 @@
    (def! values "v" nil)
    (def-f! recur (defs)
      (when defs
-       (set! names "v" (cons (caar defs) names))
-       (set! values "v" (cons (cadar defs) values))
+       (if (listp (car defs))
+           (progn
+             (set! names "v" (cons (caar defs) names))
+             (set! values "v" (cons (cadar defs) values)))
+           (progn
+             (set! names "v" (cons (car defs) names))
+             (set! values "v" (cons nil values))))
        (recur (cdr defs))))
    (recur defs)
-   `((lambda ,names ,@body) ,@values)))
+   `((lambda ,names nil ,@body) ,@values)))
 
 (def-emac labels (defs &body body)
   (fork-environment
