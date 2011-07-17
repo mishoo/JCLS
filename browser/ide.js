@@ -216,8 +216,11 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
                         } else {
                                 pak = "*PACKAGE*";
                         }
-                        JCLS.eval_string("(jcls:@ " + pak + " \"_name\")", function(name){
-                                pak = name;
+                        JCLS.eval_string("(let ((pak " + pak + ")) (if pak (jcls:@ pak \"_name\") \"\"))", function(name){
+                                if (name)
+                                        pak = name;
+                                else
+                                        pak = "(package not defined)";
                         });
                         ret.push(pak);
                         this.resumeUpdates();

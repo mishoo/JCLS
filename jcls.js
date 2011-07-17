@@ -1495,7 +1495,7 @@ JCLS.defun("MAKE-PACKAGE", function(name, use, nicknames){
 });
 
 JCLS.defun("FIND-PACKAGE", function(name){
-    return Package.get(as_name(name));
+    return Package.get(as_name(name)) || NIL;
 });
 
 JCLS.defun("FIND-SYMBOL", function(name, pack){
