@@ -39,8 +39,8 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
                                         buffer.deleteOverlay("flash-code");
                                 }).delayed(500);
                         }
-                        return buffer._bufferSubstring(buffer._rowColToPosition(s.line, s.col),
-                                                       buffer._rowColToPosition(e.line, e.col + 1));
+                        return [ buffer._rowColToPosition(s.line, s.col),
+                                 buffer._rowColToPosition(e.line, e.col + 1) ];
                 }
         };
 
@@ -116,7 +116,8 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
 
         D.KEYS = {
                 "C-c C-c && C-M-x": function() {
-                        var expr = find_toplevel_sexp(this, true);
+                        var points = find_toplevel_sexp(this, true);
+                        var expr = this.cmd("buffer_substring", points[0], points[1]);
                         (function(){
                                 eval(this, expr);
                         }).delayed(1, this);
@@ -124,6 +125,9 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
                 "C-c C-k": function() {
                         eval(this, this.getCode());
                 },
+                "C-c C-r": Ymacs_Interactive("r", function(begin, end){
+                        eval(this, this.cmd("buffer_substring", begin, end));
+                }),
                 "C-c M-o && C-c DELETE && C-c C-DELETE": "jcls_clear_output",
                 "C-c ENTER": "jcls_macroexpand_1"
         };
@@ -149,13 +153,54 @@ function make_desktop() {
                 resizable: true
         });
 
-        var ymacs = THE_EDITOR = new Ymacs_JCLS({ parent: dlg, buffers: [], lineNumbers: true });
-        ymacs.setColorTheme([ "light", "andreas" ]);
+        var layout = new DlLayout({ parent: dlg });
+
+        var toolbar = new DlContainer({ className: "DlToolbar" });
+        var menu = new DlHMenu({ parent: toolbar });
+
+        make_samples_menu(menu);
+
+        var ymacs = THE_EDITOR = new Ymacs_JCLS({ buffers: [], lineNumbers: true });
+        ymacs.setColorTheme([ "light", "standard" ]);
         ymacs.getActiveBuffer().cmd("jcls_mode");
+
+        layout.packWidget(toolbar, { pos: "top" });
+        layout.packWidget(ymacs, { pos: "bottom", fill: "*" });
 
         dlg.setSize({ x: 640, y: 480 });
         dlg.show(true);
         dlg.maximize(true);
+
+        load("./scratch.lisp", function(code){
+                ymacs.getBuffer("*scratch*").setCode(code);
+        });
+
+        ymacs.focus();
+};
+
+function make_samples_menu(parent) {
+        var samples = new DlMenuItem({ parent: parent, label: "Load sample" });
+        var menu = new DlVMenu();
+        menu.addEventListener("onSelect", function(file){
+                load(file, function(code){
+                        var ymacs = THE_EDITOR;
+                        var buf = ymacs.getBuffer(file);
+                        if (!buf) {
+                                buf = ymacs.createBuffer({ name: file });
+                                buf.cmd("jcls_mode");
+                        }
+                        buf.setCode(code);
+                        ymacs.switchToBuffer(buf);
+                });
+        });
+        samples.setMenu(menu);
+        [
+                "samples/continuations.lisp",
+                "samples/amb.lisp",
+                "samples/dlcanvas.lisp"
+        ].foreach(function(file){
+                var item = new DlMenuItem({ parent: menu, label: file, name: file });
+        });
 };
 
 function load(url, cont) {
@@ -164,7 +209,7 @@ function load(url, cont) {
                 if (this.readyState == 4 && this.status == 200)
                         cont(this.responseText);
         };
-        xhr.open("GET", url);
+        xhr.open("GET", url + "?kc=" + new Date().getTime());
         xhr.send();
 };
 
@@ -195,5 +240,7 @@ load("../jcls.js", function(code){
                 "../cl/common-lisp.lisp",
                 "../cl/javascript.lisp",
                 "./ymacs.lisp"
-        ], make_desktop);
+        ], function(){
+                JCLS.eval_string("(in-package :cl-user)", make_desktop);
+        });
 });

@@ -46,7 +46,7 @@ function Symbol(pack, name) {
     this._package = pack;
     this._name = name;
     this._fullname = (this._package
-                      ? this._package._name == "KEYWORD"
+                      ? this._package === KEYWORD
                       ? ":"
                       : this._package._name + "::"
                       : "#:") + this._name;
@@ -549,6 +549,7 @@ function read_symbol(stream, pack) {
     var esc = false, colon = null, internal = false, str = "";
     while (true) {
         var ch = stream.peek();
+        if (!ch) break;
         if (esc) { str += stream.next(); esc = false; }
         else if (ch == ":") {
             if (colon != null || pack === KEYWORD)
@@ -563,7 +564,7 @@ function read_symbol(stream, pack) {
         else if (HOP(_READTABLE_.value(), ch)) break;
         str += stream.next();
     }
-    if (/^[0-9]*\.?[0-9]+$/.test(str)) {
+    if (/^-?[0-9]*\.?[0-9]+$/.test(str)) {
         return parseFloat(str);
     }
     var m = /^([0-9]+)\x2f([0-9]+)$/.exec(str);
@@ -647,10 +648,12 @@ function write_ast_to_string(node) {
         ret = "(" + ret + ")";
     }
     else if (symbolp(node)) {
-        if (_PACKAGE_.value().find_symbol(node.name()))
+        if (node._package !== KEYWORD && _PACKAGE_.value().find_symbol(node.name())) {
             ret = node.name();
-        else
+        }
+        else {
             ret = node.fullname();
+        }
     }
     else {
         if (typeof node == "string") ret = JSON.stringify(node);

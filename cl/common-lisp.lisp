@@ -202,6 +202,11 @@
   ;; XXX: setf needed
   `(setq ,place (cons ,obj ,place)))
 
+(def-efun nth (n list)
+  (if (= n 0) (car list)
+      (when (cdr list)
+        (nth (1- n) (cdr list)))))
+
  ;;; packages
 
 (def-emac make-package (&key nicknames use)
