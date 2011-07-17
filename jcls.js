@@ -566,6 +566,10 @@ function read_symbol(stream, pack) {
     if (/^[0-9]*\.?[0-9]+$/.test(str)) {
         return parseFloat(str);
     }
+    var m = /^([0-9]+)\x2f([0-9]+)$/.exec(str);
+    if (m) {
+        return m[1] / m[2];
+    }
     str = str.toUpperCase();
     if (pack == null) pack = _PACKAGE_.value();
     var n = str;
