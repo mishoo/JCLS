@@ -161,6 +161,9 @@ Package.prototype = {
             if (sym != null) return sym;
         }
     },
+    toString: function() {
+        return "<Package " + this._name + ">";
+    },
     intern: function(name) {
         return this._symbols[name] || (
             this._symbols[name] = new Symbol(this, name)

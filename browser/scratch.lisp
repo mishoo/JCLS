@@ -1,4 +1,5 @@
-;; Type Lisp here and use the keybindings:
+;; Type Lisp here and use the keybindings: (in Emacs parlance, that is,
+;; C stands for CTRL, M stands for META which is usually the ALT key)
 ;;
 ;; - C-c C-k -- evaluate the whole buffer
 ;; - M-C-x (or C-c C-c) -- evaluate the current toplevel expression
@@ -20,3 +21,11 @@
 (sum 1000) ;; try a bigger value here
            ;; the stack won't be exhausted
            ;; for 30000 it takes 2s with Chrome
+
+;; If you go to the REPL (the buffer below this one) you can type an
+;; expression and press ENTER to evaluate it right there.  To quickly
+;; move to another frame, use M-ARROWS (for example M-ARROW_DOWN would
+;; move below); or just click there.
+
+;; For more keybindings take a look at
+;; http://www.ymacs.org/userdocs.html

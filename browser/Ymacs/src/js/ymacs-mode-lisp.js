@@ -406,10 +406,10 @@ return return-from setq multiple-value-call".qw().toHash();
 DEFINE_SINGLETON("Ymacs_Keymap_LispMode", Ymacs_Keymap, function(D, P){
 
         D.KEYS = {
-                "ENTER"            : "newline_and_indent",
-                "("                : [ "lisp_open_paren", "(" ],
-                ")"                : [ "lisp_close_paren", ")" ],
-                "C-c ] && C-c C-]" : "lisp_close_all_parens"
+                "ENTER && C-j && C-m"  : "newline_and_indent",
+                "("                    : [ "lisp_open_paren", "(" ],
+                ")"                    : [ "lisp_close_paren", ")" ],
+                "C-c ] && C-c C-]"     : "lisp_close_all_parens"
         };
 
 });
