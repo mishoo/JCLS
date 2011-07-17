@@ -1,12 +1,12 @@
 ;; Type Lisp here and use the keybindings:
 ;;
-;; - «C-c C-k» to evaluate the whole buffer
-;; - «M-C-x», or «C-c C-c», to evaluate the current toplevel expression
-;; - «C-c C-r» to evaluate the selection
-;; - «C-c ENTER» to macroexpand-1 the current expression (the cursor must be on the open paren)
-;; - «C-c DELETE» to clear the output buffer
-;; - «C-x C-s» to save the current buffer (in localStorage)
-;; - «C-x C-f» to load a file from localStorage
+;; - C-c C-k -- evaluate the whole buffer
+;; - M-C-x (or C-c C-c) -- evaluate the current toplevel expression
+;; - C-c C-r -- evaluate the selection
+;; - C-c ENTER -- macroexpand-1 the current expression (the cursor must be on the open paren)
+;; - C-c DELETE -- clear the output buffer
+;; - C-x C-s -- save the current buffer (in localStorage)
+;; - C-x C-f -- load a file from localStorage
 ;;
 ;; To load some ready-made samples, click “Load sample”
 

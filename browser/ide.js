@@ -55,6 +55,10 @@ DEFINE_SINGLETON("Ymacs_Keymap_JCLS", Ymacs_Keymap, function(D, P){
                         buf.cmd("other_frame");
                         buf.cmd("switch_to_buffer", "*jcls*");
                         ed.setActiveFrame(frame);
+                        out.forAllFrames(function(frame){
+                                frame.__lineNumbers = false; // :-\
+                                frame.delClass("Ymacs-line-numbers");
+                        });
                 }
                 return out;
         };
