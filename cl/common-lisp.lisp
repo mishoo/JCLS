@@ -107,7 +107,7 @@
 (def-emac defparameter (name value &optional doc)
   `(progn
      (def! ,name "v" nil t)
-     (special! ,name t)
+     (special! ,name)
      (setq ,name ,value)))
 
 (def-emac prog1 (first &body body)
