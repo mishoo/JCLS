@@ -125,6 +125,7 @@ return return-from setq multiple-value-call".qw().toHash();
                 "flet"                : "1*",
                 "macrolet"            : "1*",
                 "destructuring-bind"  : "2*",
+                "unwind-protect"      : "1*",
                 "case"                : "1*",
                 "ecase"               : "1*"
         };
