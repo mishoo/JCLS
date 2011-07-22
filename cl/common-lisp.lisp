@@ -25,10 +25,11 @@
                jcls::def-emac
                jcls::in-package
                jcls::export
+               jcls::import
                jcls::intern
                jcls::special!))
 
-(export '(export intern in-package))
+(export '(export import intern in-package))
 
 (def-emac when (condition &body body)
   `(if ,condition
@@ -106,7 +107,7 @@
 (def-emac defparameter (name value &optional doc)
   `(progn
      (def! ,name "v" nil t)
-     (special! ,name)
+     (special! ,name t)
      (setq ,name ,value)))
 
 (def-emac prog1 (first &body body)
