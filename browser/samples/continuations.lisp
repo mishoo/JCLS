@@ -12,10 +12,10 @@
 
 ;; the following is equivalent, but less verbose thanks to some macros
 ;; you can place the cursor on the start of "(jcls:with-cc"
-;; or on "(ymacs:delay" and press «C-c ENTER» to see the macroexpansion
+;; or on "(ymacs:with-delay" and press «C-c ENTER» to see the macroexpansion
 (defun sleep2 (milliseconds)
   (jcls:with-cc (k)
-    (ymacs:delay (milliseconds)
+    (ymacs:with-delay (milliseconds)
       (funcall k))))
 
 (progn

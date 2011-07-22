@@ -1,6 +1,6 @@
 (defpackage :ymacs
   (:use :cl)
-  (:export "LOG" "DELAY"))
+  (:export "LOG" "WITH-DELAY"))
 
 (in-package :ymacs)
 
@@ -12,7 +12,7 @@
 (defun log (txt)
   (call-ymacs "jcls_log" txt))
 
-(defmacro delay ((timeout) &body body)
+(defmacro with-delay ((timeout) &body body)
   `(jcls:call-native (jcls:native "setTimeout") nil
                      (jcls:make-native-function (lambda ()
                                                   ,@body))

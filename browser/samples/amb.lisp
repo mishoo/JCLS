@@ -8,7 +8,7 @@
 (defpackage test-amb
   (:use :cl)
   (:import-from :jcls :call/cc :with-cc)
-  (:import-from :ymacs :delay :log))
+  (:import-from :ymacs :with-delay :log))
 
 (in-package :test-amb)
 
@@ -37,14 +37,14 @@
                        (funcall +sk ,alt)))
                   alternatives)
            (setq amb-fail +prev-amb-fail)
-           (delay (0)
-                  (funcall +prev-amb-fail nil))))
+           (with-delay (0)
+             (funcall +prev-amb-fail nil))))
       `(funcall amb-fail nil)))
 
 ;; note above that we're delaying the previous continuation (using
-;; ymacs:delay); this allows the browser to refresh the display and
-;; handle events, so that you can continue to use the editor, while
-;; this program runs.
+;; ymacs:with-delay); this allows the browser to refresh the display
+;; and handle events, so that you can continue to use the editor,
+;; while this program runs.
 
 
 
