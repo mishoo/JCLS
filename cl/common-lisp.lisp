@@ -35,6 +35,14 @@
   `(if ,condition
        (progn ,@body)))
 
+(def-emac setq (&rest defs)
+  (fork-environment
+   (def-f! recur (defs)
+     (if defs
+         (cons `(set! ,(car defs) "v" ,(cadr defs))
+               (recur (cddr defs)))))
+   `(progn ,@(recur defs))))
+
 (def-emac let* (defs &body body)
   (fork-environment
    (def-f! recur (defs)
@@ -49,21 +57,31 @@
      ,@body)))
 
 (def-emac let (defs &body body)
-  (fork-environment
-   (def! names "v" nil)
-   (def! values "v" nil)
-   (def-f! recur (defs)
-     (when defs
-       (if (listp (car defs))
-           (progn
-             (set! names "v" (cons (caar defs) names))
-             (set! values "v" (cons (cadar defs) values)))
-           (progn
-             (set! names "v" (cons (car defs) names))
-             (set! values "v" (cons nil values))))
-       (recur (cdr defs))))
-   (recur defs)
-   `((lambda ,names nil ,@body) ,@values)))
+  (let* (names values)
+    (def-f! recur (defs)
+      (when defs
+        (if (listp (car defs))
+            (setq names (cons (caar defs) names)
+                  values (cons (cadar defs) values))
+            (setq names (cons (car defs) names)
+                  values (cons nil values)))
+        (recur (cdr defs))))
+    (recur defs)
+    `((lambda ,names nil ,@body) ,@values)))
+
+(def-emac dlet (vars &body body)
+  (let ((saved (map (lambda (el) (gensym)) vars)))
+    `(let (,@(mapcar (lambda (save-name def)
+                       `(,save-name ,(car def))) saved vars))
+       (unwind-protect
+            (progn
+              ,@(map (lambda (def)
+                       `(setq ,(car def) ,(cadr def)))
+                     vars)
+              ,@body)
+         ,@(mapcar (lambda (a b)
+                     `(setq ,(car a) ,b))
+                   vars saved)))))
 
 (def-emac labels (defs &body body)
   (fork-environment
@@ -93,13 +111,6 @@
                      (setq ,tmp (cdr ,tmp))))
                 names)
          ,@body) ,@values))))
-
-(def-emac setq (&rest defs)
-  (labels ((recur (defs)
-             (if defs
-                 (cons `(set! ,(car defs) "v" ,(cadr defs))
-                       (recur (cddr defs))))))
-    `(progn ,@(recur defs))))
 
 (def-emac defun (name args &body body)
   `(def! ,name "f" (lambda ,args ,@body) t))
@@ -206,6 +217,21 @@
   (if list
       (cons (funcall func (car list))
             (map func (cdr list)))))
+
+(def-emac mapcar (func list &rest more-lists)
+  (let* ((rec (gensym))
+         (fname (gensym))
+         (lists (cons list more-lists))
+         (args (map (lambda (el) (gensym)) lists)))
+    `(let ((,fname ,func))
+       (labels ((,rec ,args
+                  (if (and ,@args)
+                      (cons (funcall ,fname
+                                     ,@(map (lambda (l)
+                                              `(car ,l)) args))
+                            (,rec ,@(map (lambda (l)
+                                           `(cdr ,l)) args))))))
+         (,rec ,@lists)))))
 
 (def-emac push (obj place)
   ;; XXX: setf needed

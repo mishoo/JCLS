@@ -32,6 +32,53 @@ function HOP(obj, prop) {
     return Object.prototype.hasOwnProperty.call(obj, prop);
 };
 
+/* -----[ Env ]----- */
+
+function Environment(parent) {
+    function a(){};
+    if (parent) a.prototype = parent.data;
+    this.data = new a();
+    this.parent = parent;
+};
+
+Environment.prototype = {
+    full: function(ns, name) {
+        if (!(name instanceof Symbol)) {
+            // XXX: should drop this in production code.  There's no
+            // way to get here for anything other than a Symbol.
+            throw new Error("Expecting a Symbol");
+        }
+        return ns + "___" + name;
+    },
+    get: function(ns, name) {
+        return this.data[this.full(ns, name)];
+    },
+    get_origin: function(name) {
+        var s = this;
+        while (s) {
+            if (HOP(s.data, name)) return s;
+            s = s.parent;
+        }
+    },
+    set: function(ns, name, value) {
+        var full = this.full(ns, name);
+        var org = this.get_origin(full);
+        if (!org) throw new Error("Undeclared variable " + name);
+        return org.data[full] = value;
+    },
+    force: function(ns, name, value) {
+        return this.data[this.full(ns, name)] = value;
+    },
+    defun: function(name, value) {
+        return this.force("f", name, value);
+    },
+    fork: function() {
+        return new Environment(this);
+    }
+};
+
+var _GLOBAL_ENV_ = new Environment();
+
 /* -----[ Symbols and packages ]----- */
 
 var _ALL_PACKAGES_ = {};
@@ -53,7 +100,6 @@ function Symbol(pack, name) {
     this._plist = {};
     this._special_var = false;
     this._special_op = null;
-    this._bindings = [];
 };
 
 Symbol.prototype = {
@@ -85,23 +131,13 @@ Symbol.prototype = {
         }
         return this._special_op;
     },
-    bind: function(val) {
-        this._bindings.unshift(val);
-        return this;
-    },
-    unbind: function() {
-        this._bindings.shift();
-        return this;
-    },
-    setq: function(val) {
-        return this._bindings[0] = val;
-    },
     value: function() {
-        return this._bindings[0];
+        return _GLOBAL_ENV_.get("v", this);
     },
-    special_var: function(is) {
+    special_var: function(is, val) {
         if (is != null) {
             this._special_var = is;
+            _GLOBAL_ENV_.force("v", this, val || NIL);
             return this;
         };
         return this._special_var;
@@ -215,7 +251,7 @@ var CL_USER = new Package("CL-USER", {
     use: [ "CL" ]
 });
 
-var _PACKAGE_ = CL.expsym("*PACKAGE*").special_var(true).bind(JCLS);
+var _PACKAGE_ = CL.expsym("*PACKAGE*").special_var(true, JCLS);
 
 /* -----[ basics ]----- */
 
@@ -305,56 +341,6 @@ function maplist(list, func) {
     return ret;
 };
 
-/* -----[ Env ]----- */
-
-function Environment(parent) {
-    function a(){};
-    if (parent) a.prototype = parent.data;
-    this.data = new a();
-    this.parent = parent;
-};
-
-Environment.prototype = {
-    full: function(ns, name) {
-        if (!(name instanceof Symbol)) {
-            // XXX: should drop this in production code.  There's no
-            // way to get here for anything other than a Symbol.
-            throw new Error("Expecting a Symbol");
-        }
-        return ns + "___" + name;
-    },
-    get: function(ns, name) {
-        var val = this.data[this.full(ns, name)];
-        if (val == null) val = name.value();
-        return val;
-    },
-    get_origin: function(name) {
-        var s = this;
-        while (s) {
-            if (HOP(s.data, name)) return s;
-            s = s.parent;
-        }
-    },
-    set: function(ns, name, value) {
-        if (name.special_var()) return name.setq(value);
-        var full = this.full(ns, name);
-        var org = this.get_origin(full);
-        if (!org) throw new Error("Undeclared variable " + name);
-        return org.data[full] = value;
-    },
-    force: function(ns, name, value) {
-        return this.data[this.full(ns, name)] = value;
-    },
-    defun: function(name, value) {
-        return this.force("f", name, value);
-    },
-    fork: function() {
-        return new Environment(this);
-    }
-};
-
-var _GLOBAL_ENV_ = new Environment();
-
 /* -----[ the reader ]----- */
 
 function lisp_input_stream($SOURCE) {
@@ -436,7 +422,7 @@ function is_whitespace(ch) {
     return HOP(WHITESPACE_CHARS, ch);
 };
 
-var _READTABLE_ = CL.expsym("*READTABLE*").special_var(true).bind({
+var _READTABLE_ = CL.expsym("*READTABLE*").special_var(true, {
     "(": read_standard_list,
     '"': read_string,
     "'": read_quote,
