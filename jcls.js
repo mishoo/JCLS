@@ -231,7 +231,7 @@ Package.prototype = {
     },
     defun: function(name, func) {
         return this.defun2(name, function(){
-            return this.succeed(func.apply(this, arguments), this.fail);
+            return this.succeed(func.apply(this, arguments));
         });
     },
     special_: function(name, func) {
@@ -713,10 +713,10 @@ var analyze = (function(){
         JCLS.special("QUASIQUOTE", function(ast){
             var expr = car(ast);
             if (atom(expr)) return itself(expr);
-            return function(env, succeed, fail) {
-                return NEXT(analyze(qq_expand(expr)), env, function(val, fail2){
-                    return NEXT(succeed, val, fail2);
-                }, fail);
+            return function(env, succeed) {
+                return NEXT(analyze(qq_expand(expr)), env, function(val){
+                    return NEXT(succeed, val);
+                });
             };
         });
     }(JCLS.intern("UNQUOTE"),
@@ -737,8 +737,8 @@ var analyze = (function(){
 
     CL.special("FUNCTION", function(ast){
         var name = car(ast);
-        return function(env, succeed, fail) {
-            return NEXT(succeed, env.get("f", name), fail);
+        return function(env, succeed) {
+            return NEXT(succeed, env.get("f", name));
         };
     });
 
@@ -750,21 +750,20 @@ var analyze = (function(){
 
     CL.special("MACROEXPAND-1", function(ast){
         var tree = analyze(car(ast)), menv = analyze(cadr(ast));
-        return function(env, succeed, fail0) {
-            return NEXT(menv, env, function(menv, fail1){
-                return NEXT(tree, env, function(tree, fail2){
+        return function(env, succeed) {
+            return NEXT(menv, env, function(menv){
+                return NEXT(tree, env, function(tree){
                     var m = env.get("m", car(tree));
                     if (!m) return succeed(tree);
                     return NEXT(
                         m,
                         nullp(menv) ? _GLOBAL_ENV_ : menv,
                         function(func){
-                            return fapply(func, cdr(tree), succeed, fail2);
-                        },
-                        fail2
+                            return fapply(func, cdr(tree), succeed);
+                        }
                     );
-                }, fail1);
-            }, fail0);
+                });
+            });
         };
     });                         // my brain's on fire.
 
@@ -772,10 +771,10 @@ var analyze = (function(){
         var args = do_lambda_list(car(ast), true);
         var values = analyze(cadr(ast));
         var body = do_sequence(cddr(ast));
-        return function(env, succeed, fail) {
-            return NEXT(values, env, function(values, fail2){
-                return NEXT(fapply, [ args, body, env ], values, succeed, fail2);
-            }, fail);
+        return function(env, succeed) {
+            return NEXT(values, env, function(values){
+                return NEXT(fapply, [ args, body, env ], values, succeed);
+            });
         };
     });
 
@@ -783,8 +782,8 @@ var analyze = (function(){
     {
         JCLS.special("FORK-ENVIRONMENT", function(body){
             body = do_sequence(body);
-            return function(env, succeed, fail) {
-                return NEXT(body, env.fork(), succeed, fail);
+            return function(env, succeed) {
+                return NEXT(body, env.fork(), succeed);
             };
         });
 
@@ -792,11 +791,11 @@ var analyze = (function(){
             var name = car(ast);
             var kind = cadr(ast);
             var value = analyze(caddr(ast));
-            return function(env, succeed, fail) {
-                return NEXT(value, env, function(value, fail2){
+            return function(env, succeed) {
+                return NEXT(value, env, function(value){
                     env.set(kind, name, value);
-                    return NEXT(succeed, value, fail2);
-                }, fail);
+                    return NEXT(succeed, value);
+                });
             };
         });
 
@@ -805,25 +804,25 @@ var analyze = (function(){
             var kind = cadr(ast);
             var value = analyze(caddr(ast));
             var global = cadddr(ast); // only T or NIL
-            if (symbolp(name)) return function(env, succeed, fail) {
-                return NEXT(value, env, function(value, fail2){
+            if (symbolp(name)) return function(env, succeed) {
+                return NEXT(value, env, function(value){
                     (nullp(global) ? env : _GLOBAL_ENV_).force(kind, name, value);
-                    return NEXT(succeed, value, fail2);
-                }, fail);
+                    return NEXT(succeed, value);
+                });
             };
-            else return name = analyze(name), function(env, succeed, fail) {
-                return NEXT(name, env, function(name, fail2){
-                    return NEXT(value, env, function(value, fail3){
+            else return name = analyze(name), function(env, succeed) {
+                return NEXT(name, env, function(name){
+                    return NEXT(value, env, function(value){
                         (nullp(global) ? env : _GLOBAL_ENV_).force(kind, name, value);
-                        return NEXT(succeed, value, fail3);
-                    }, fail2);
-                }, fail);
+                        return NEXT(succeed, value);
+                    });
+                });
             };
         });
 
         JCLS.special("SPECIAL!", function(ast){
             var name = car(ast);
-            return function(env, succeed, fail) {
+            return function(env, succeed) {
                 var spec = !nullp(cadr(ast));
                 name.special_var(spec);
                 return NEXT(succeed, spec);
@@ -832,7 +831,7 @@ var analyze = (function(){
 
         JCLS.special("SPECIAL?", function(ast){
             var name = car(ast);
-            return function(env, succeed, fail) {
+            return function(env, succeed) {
                 NEXT(succeed, name.special_var());
             };
         });
@@ -840,11 +839,9 @@ var analyze = (function(){
 
     CL.special("UNWIND-PROTECT", function(ast){
         var expr = analyze(car(ast)), cleanup = do_sequence(cdr(ast));
-        return function(env, succeed, fail){
-            return NEXT(expr, env, function(expr, fail2){
-                return NEXT(cleanup, env, curry(succeed, expr, fail2), fail2);
-            }, function(expr){
-                return NEXT(cleanup, env, fail2);
+        return function(env, succeed){
+            return NEXT(expr, env, function(expr){
+                return NEXT(cleanup, env, curry(succeed, expr));
             });
         };
     });
@@ -871,19 +868,19 @@ var analyze = (function(){
             if (i == tags.length - 1) return tags[i];
             return tags[i] = seq(tags[i], loop(i + 2));
         })(1);
-        return function(env, succeed, fail) {
+        return function(env, succeed) {
             env = env.fork();
             for (var i = 0; i < tags.length;) {
                 env.force("t", tags[i++], [ tags[i++], succeed ]);
             }
-            return NEXT(body, env, succeed, fail);
+            return NEXT(body, env, succeed);
         };
     });
 
     CL.special("GO", function(tag){
         tag = car(tag);
         if (!symbolp(tag)) throw new Error("Expecting a symbol for GO");
-        return function(env, succeed, fail) {
+        return function(env, succeed) {
             var cont = env.get("t", tag);
             if (!cont) throw new Error("GO tag not found " + tag);
             return NEXT(cont[0], env, function(){
@@ -893,19 +890,19 @@ var analyze = (function(){
                 // line after the current GO statement.  What we
                 // should do instead is call the tagbody's success
                 // continuation.
-                return NEXT(cont[1], NIL, fail);
-            }, fail);
+                return NEXT(cont[1], NIL);
+            });
         };
     });
 
     JCLS.special("CALL/CC", function(ast){
         var func = analyze(car(ast));
-        return function(env, succeed, fail){
-            return NEXT(func, env, function(func, fail2){
+        return function(env, succeed){
+            return NEXT(func, env, function(func){
                 return NEXT(fapply, func, cons(function(val){
-                    return NEXT(succeed, val, fail);
-                }, NIL), function(){}, fail2);
-            }, fail);
+                    return NEXT(succeed, val);
+                }, NIL), function(){});
+            });
         };
     });
 
@@ -917,8 +914,8 @@ var analyze = (function(){
             return itself(expr);
           default:
             if (expr._package === KEYWORD) return itself(expr);
-            else return function(env, succeed, fail) {
-                return NEXT(succeed, env.get("v", expr), fail);
+            else return function(env, succeed) {
+                return NEXT(succeed, env.get("v", expr));
             };
         }
         else if (numberp(expr) || stringp(expr)) return itself(expr);
@@ -931,25 +928,24 @@ var analyze = (function(){
     };
 
     function itself(el) {
-        return function(env, succeed, fail){ return succeed(el, fail) };
+        return function(env, succeed){ return succeed(el) };
     };
 
     function do_if(condition, consequent, alternative) {
         condition = analyze(condition);
         consequent = analyze(consequent);
         alternative = analyze(alternative);
-        return function(env, succeed, fail) {
+        return function(env, succeed) {
             return NEXT(
                 condition,
                 env,
-                function(val, fail2) {
+                function(val) {
                     if (nullp(val)) {
-                        return NEXT(alternative, env, succeed, fail2);
+                        return NEXT(alternative, env, succeed);
                     } else {
-                        return NEXT(consequent, env, succeed, fail2);
+                        return NEXT(consequent, env, succeed);
                     }
-                },
-                fail
+                }
             );
         };
     };
@@ -967,64 +963,64 @@ var analyze = (function(){
             // returns undefined on purpose if the key wasn't found
         };
 
-        function lambda_arg_key_list(arg, env, values, succeed, fail) {
+        function lambda_arg_key_list(arg, env, values, succeed) {
             var name = arg[0], def = arg[1], arg_p = arg[2];
             var val = find(name, values);
             if (val) {
                 env.force("v", name, val);
                 if (!nullp(arg_p)) env.force("v", arg_p, T);
-                return NEXT(succeed, values, fail);
+                return NEXT(succeed, values);
             } else {
-                return NEXT(def, env, function(val, fail2) {
+                return NEXT(def, env, function(val) {
                     env.force("v", name, val);
                     if (!nullp(arg_p)) env.force("v", arg_p, NIL);
-                    return NEXT(succeed, values, fail2);
-                }, fail);
+                    return NEXT(succeed, values);
+                });
             }
         };
 
-        function lambda_arg_key(arg, env, values, succeed, fail) {
+        function lambda_arg_key(arg, env, values, succeed) {
             env.force("v", arg, find(arg, values) || NIL);
-            return NEXT(succeed, values, fail);
+            return NEXT(succeed, values);
         };
 
-        function lambda_arg_optional_list(arg, env, values, succeed, fail) {
+        function lambda_arg_optional_list(arg, env, values, succeed) {
             var name = arg[0], def = arg[1], arg_p = arg[2];
             if (nullp(values)) {
-                return NEXT(def, env, function(val, fail2){
+                return NEXT(def, env, function(val){
                     env.force("v", name, val);
                     if (!nullp(arg_p)) env.force("v", arg_p, NIL);
-                    return NEXT(succeed, NIL, fail2);
-                }, fail);
+                    return NEXT(succeed, NIL);
+                });
             } else {
                 env.force("v", name, car(values));
                 if (!nullp(arg_p)) env.force("v", arg_p, T);
-                return NEXT(succeed, cdr(values), fail);
+                return NEXT(succeed, cdr(values));
             }
         };
 
-        function lambda_arg_itself(name, optional, env, values, succeed, fail) {
+        function lambda_arg_itself(name, optional, env, values, succeed) {
             if (nullp(values)) {
                 if (!optional) throw new Error(name + " is a required argument");
                 env.force("v", name, NIL);
-                return NEXT(succeed, NIL, fail);
+                return NEXT(succeed, NIL);
             } else {
                 env.force("v", name, car(values));
-                return NEXT(succeed, cdr(values), fail);
+                return NEXT(succeed, cdr(values));
             }
         };
 
-        function lambda_arg_rest(name, env, values, succeed, fail) {
+        function lambda_arg_rest(name, env, values, succeed) {
             env.force("v", name, values);
-            return NEXT(succeed, NIL, fail);
+            return NEXT(succeed, NIL);
         };
 
-        function lambda_arg_destruct(args, env, values, succeed, fail) {
+        function lambda_arg_destruct(args, env, values, succeed) {
             if (!listp(car(values)))
                 throw new Error("Expecting a list");
-            return NEXT(inject_lambda_args, args, env, car(values), function(result, fail2){
-                return NEXT(succeed, cdr(values), fail2);
-            }, fail);
+            return NEXT(inject_lambda_args, args, env, car(values), function(result){
+                return NEXT(succeed, cdr(values));
+            });
         };
 
         return function do_lambda_list(args, destructuring) {
@@ -1077,19 +1073,19 @@ var analyze = (function(){
     function do_lambda(args, body, destructuring) {
         args = do_lambda_list(args, destructuring);
         body = do_sequence(body);
-        return function(env, succeed, fail) {
+        return function(env, succeed) {
             if (nullp(env)) env = _GLOBAL_ENV_;
             var func = [ args, body, env ];
             func.toString = function(){ return "<FUNCTION>" };
-            return NEXT(succeed, func, fail);
+            return NEXT(succeed, func);
         };
     };
 
     function seq(a, b) {
-        return function(env, succeed, fail) {
-            return NEXT(a, env, function(a, fail2){
-                return NEXT(b, env, succeed, fail2);
-            }, fail);
+        return function(env, succeed) {
+            return NEXT(a, env, function(a){
+                return NEXT(b, env, succeed);
+            });
         };
     };
 
@@ -1101,13 +1097,13 @@ var analyze = (function(){
         })(car(list), cdr(list));
     };
 
-    function get_args(aprocs, env, succeed, fail) {
-        if (nullp(aprocs)) return NEXT(succeed, NIL, fail);
-        return NEXT(car(aprocs), env, function(arg, fail2) {
-            return NEXT(get_args, cdr(aprocs), env, function(args, fail3) {
-                return NEXT(succeed, cons(arg, args), fail3);
-            }, fail2);
-        }, fail);
+    function get_args(aprocs, env, succeed) {
+        if (nullp(aprocs)) return NEXT(succeed, NIL);
+        return NEXT(car(aprocs), env, function(arg) {
+            return NEXT(get_args, cdr(aprocs), env, function(args) {
+                return NEXT(succeed, cons(arg, args));
+            });
+        });
     };
 
     function do_application(operator, args) {
@@ -1134,13 +1130,13 @@ var analyze = (function(){
         }
         // otherwise function call
         args = maplist(args, analyze);
-        return function(env, succeed, fail) {
+        return function(env, succeed) {
             var func = env.get("f", operator);
             if (!func)
                 throw new Error("Undefined function: " + write_ast_to_string(operator));
-            return NEXT(get_args, args, env, function(args, fail2){
-                return NEXT(fapply, func, args, succeed, fail2);
-            }, fail);
+            return NEXT(get_args, args, env, function(args){
+                return NEXT(fapply, func, args, succeed);
+            });
         };
     };
 
@@ -1148,10 +1144,10 @@ var analyze = (function(){
         args = do_lambda_list(args);
         body = do_sequence(body);
         values = maplist(values, analyze);
-        return function(env, succeed, fail){
-            return NEXT(get_args, values, env, function(values, fail2){
-                return NEXT(fapply, [ args, body, env ], values, succeed, fail2);
-            }, fail);
+        return function(env, succeed){
+            return NEXT(get_args, values, env, function(values){
+                return NEXT(fapply, [ args, body, env ], values, succeed);
+            });
         };
     };
 
@@ -1159,20 +1155,19 @@ var analyze = (function(){
 
 }());
 
-function inject_lambda_args(aprocs, env, values, succeed, fail) {
-    if (nullp(aprocs)) return NEXT(succeed, NIL, fail);
-    return NEXT(car(aprocs), env, values, function(next_values, fail2){
-        return NEXT(inject_lambda_args, cdr(aprocs), env, next_values, function(results, fail3){
-            return succeed(results, fail3);
-        }, fail2);
-    }, fail);
+function inject_lambda_args(aprocs, env, values, succeed) {
+    if (nullp(aprocs)) return NEXT(succeed, NIL);
+    return NEXT(car(aprocs), env, values, function(next_values){
+        return NEXT(inject_lambda_args, cdr(aprocs), env, next_values, function(results){
+            return succeed(results);
+        });
+    });
 };
 
-function fapply(func, values, succeed, fail) {
+function fapply(func, values, succeed) {
     if (func instanceof Function) {
         return func.apply({
-            succeed: succeed,
-            fail: fail
+            succeed: succeed
         }, list_to_array(values));
     }
     else if (func instanceof Array) {
@@ -1181,28 +1176,26 @@ function fapply(func, values, succeed, fail) {
             args,
             env,
             values,
-            curry(NEXT, body, env, succeed, fail),
-            fail
+            curry(NEXT, body, env, succeed)
         );
     }
 };
 
-function eval(ast, env, succeed, fail) {
+function eval(ast, env, succeed) {
     return trampoline_apply(analyze(ast), [
         env || _GLOBAL_ENV_,
-        succeed,
-        fail
+        succeed
     ]);
 };
 
-function eval_string(input, succeed, fail) {
+function eval_string(input, succeed) {
     var EOF = {};
     input = lisp_input_stream(input);
-    trampoline_apply(function goon(ret, fail) {
+    trampoline_apply(function goon(ret) {
         var expr = read(input, false, EOF);
-        if (expr === EOF) succeed(ret, fail);
-        else eval(expr, null, goon, fail);
-    }, [ NIL, fail ]);
+        if (expr === EOF) succeed(ret);
+        else eval(expr, null, goon);
+    }, [ NIL ]);
 };
 
 exports.write_ast_to_string = write_ast_to_string;
@@ -1324,7 +1317,7 @@ CL.defun2("FUNCALL", function(){
     var func = car(list), args = cdr(list);
     if (symbolp(func))
         func = _GLOBAL_ENV_.get("f", func);
-    return NEXT(fapply, func, args, this.succeed, this.fail);
+    return NEXT(fapply, func, args, this.succeed);
 });
 
 CL.defun2("APPLY", function(func) {
@@ -1341,7 +1334,7 @@ CL.defun2("APPLY", function(func) {
     }
     if (p) set_cdr(p, last);
     else list = last;
-    return NEXT(fapply, func, list, this.succeed, this.fail);
+    return NEXT(fapply, func, list, this.succeed);
 });
 
 CL.defun("MACRO-FUNCTION", function(name, env){
