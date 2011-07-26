@@ -281,7 +281,8 @@ function listp(arg) { return arg instanceof Pair || nullp(arg) };
 // function set_cdr(pair, val) { return pair[1] = val };
 
 // function cons(first, second) { return [ first, second ] };
-// function consp(arg) { return arg instanceof Array || nullp(arg) };
+// function consp(arg) { return arg instanceof Array };
+// function listp(arg) { return arg instanceof Array || nullp(arg) };
 
 function last(list) {
     if (nullp(list)) return NIL;
@@ -1091,10 +1092,20 @@ var analyze = (function(){
 
     function do_sequence(list) {
         list = maplist(list, analyze);
-        return (function loop(first, rest) {
-            if (nullp(rest)) return first;
-            else return loop(seq(first, car(rest)), cdr(rest));
-        })(car(list), cdr(list));
+
+        // iterative version
+        var first = car(list), rest = cdr(list);
+        while (!nullp(rest)) {
+            first = seq(first, car(rest));
+            rest = cdr(rest);
+        }
+        return first;
+
+        // the recursive version is more beautiful, but it fails miserably without TCO.
+        // return (function loop(first, rest) {
+        //     if (nullp(rest)) return first;
+        //     else return loop(seq(first, car(rest)), cdr(rest));
+        // })(car(list), cdr(list));
     };
 
     function get_args(aprocs, env, succeed) {

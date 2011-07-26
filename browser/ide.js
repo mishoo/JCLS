@@ -308,8 +308,8 @@ function make_desktop() {
         btn("Paste from system clipboard", function(){ buffer().cmd("yank_from_operating_system") });
 
         var ymacs = THE_EDITOR = new Ymacs_JCLS({ buffers: [], lineNumbers: true });
-        ymacs.setColorTheme([ "light", "standard" ]);
-        //ymacs.setColorTheme([ "dark", "mishoo" ]);
+        //ymacs.setColorTheme([ "light", "standard" ]);
+        ymacs.setColorTheme([ "dark", "mishoo" ]);
         ymacs.getActiveBuffer().cmd("jcls_mode");
 
         layout.packWidget(toolbar, { pos: "top" });

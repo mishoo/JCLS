@@ -36,25 +36,23 @@
        (progn ,@body)))
 
 (def-emac setq (&rest defs)
-  (fork-environment
-   (def-f! recur (defs)
-     (if defs
-         (cons `(set! ,(car defs) "v" ,(cadr defs))
-               (recur (cddr defs)))))
-   `(progn ,@(recur defs))))
+  (def-f! recur (defs)
+    (if defs
+        (cons `(set! ,(car defs) "v" ,(cadr defs))
+              (recur (cddr defs)))))
+  `(progn ,@(recur defs)))
 
 (def-emac let* (defs &body body)
-  (fork-environment
-   (def-f! recur (defs)
-     (if defs
-         (cons (if (listp (car defs))
-                   `(def! ,(caar defs) "v" ,(cadar defs))
-                   `(def! ,(car defs) "v" nil))
-               (recur (cdr defs)))))
-   `(fork-environment
-     ,@(recur defs)
-     nil
-     ,@body)))
+  (def-f! recur (defs)
+    (if defs
+        (cons (if (listp (car defs))
+                  `(def! ,(caar defs) "v" ,(cadar defs))
+                  `(def! ,(car defs) "v" nil))
+              (recur (cdr defs)))))
+  `(fork-environment
+    ,@(recur defs)
+    nil
+    ,@body))
 
 (def-emac let (defs &body body)
   (let* (names values)
@@ -84,33 +82,29 @@
                    vars saved)))))
 
 (def-emac labels (defs &body body)
-  (fork-environment
-   (def-f! recur (defs)
-     (if defs
-         (cons `(def-f! ,(caar defs) ,(cadar defs) ,@(cddar defs))
-               (recur (cdr defs)))))
-   `(fork-environment
-     ,@(recur defs)
-     ,@body)))
+  (def-f! recur (defs)
+    (if defs
+        (cons `(def-f! ,(caar defs) ,(cadar defs) ,@(cddar defs))
+              (recur (cdr defs)))))
+  `(fork-environment
+    ,@(recur defs)
+    ,@body))
 
 (def-emac flet (defs &body body)
-  (fork-environment
-   (def! names "v" nil)
-   (def! values "v" nil)
-   (def-f! recur (defs)
-     (when defs
-       (set! names "v" (cons (caar defs) names))
-       (set! values "v" (cons `(lambda ,(cadar defs) ,@(cddar defs)) values))
-       (recur (cdr defs))))
-   (recur defs)
-   (let ((tmp (gensym "FLET")))
-     `((lambda (&rest ,tmp)
-         ,@(map (lambda (name)
-                  `(progn
-                     (def! ,name "f" (car ,tmp))
-                     (setq ,tmp (cdr ,tmp))))
-                names)
-         ,@body) ,@values))))
+  (let (names values (tmp (gensym "FLET")))
+    (labels ((recur (defs)
+               (when defs
+                 (set! names "v" (cons (caar defs) names))
+                 (set! values "v" (cons `(lambda ,(cadar defs) ,@(cddar defs)) values))
+                 (recur (cdr defs)))))
+      (recur defs)
+      `((lambda (&rest ,tmp)
+          ,@(map (lambda (name)
+                   `(progn
+                      (def! ,name "f" (car ,tmp))
+                      (setq ,tmp (cdr ,tmp))))
+                 names)
+          ,@body) ,@values))))
 
 (def-emac defun (name args &body body)
   `(def! ,name "f" (lambda ,args ,@body) t))
@@ -178,18 +172,18 @@
   (let ((vexpr (gensym "CASE")))
     `(let ((,vexpr ,expr))
        ,(labels ((recur (cases)
-                        (when cases
-                          (if (listp (caar cases))
-                              `(if (member ,vexpr ',(caar cases))
-                                   (progn ,@(cdar cases))
-                                   ,(recur (cdr cases)))
-                              (if (and (not (cdr cases))
-                                       (or (eq (caar cases) 'otherwise)
-                                           (eq (caar cases) t)))
-                                  `(progn ,@(cdar cases))
-                                  `(if (eq ,vexpr ',(caar cases))
-                                       (progn ,@(cdar cases))
-                                       ,(recur (cdr cases))))))))
+                   (when cases
+                     (if (listp (caar cases))
+                         `(if (member ,vexpr ',(caar cases))
+                              (progn ,@(cdar cases))
+                              ,(recur (cdr cases)))
+                         (if (and (not (cdr cases))
+                                  (or (eq (caar cases) 'otherwise)
+                                      (eq (caar cases) t)))
+                             `(progn ,@(cdar cases))
+                             `(if (eq ,vexpr ',(caar cases))
+                                  (progn ,@(cdar cases))
+                                  ,(recur (cdr cases))))))))
                 (recur cases)))))
 
 (def-efun foreach (list func)
