@@ -12,6 +12,26 @@
 
 ----------------------------------------------------------------------
 
+The following section was the original README, but it's not quite true
+anymore.  We don't have dynamic variables now, nor CATCH / THROW /
+IGNORE-ERRORS / UNWIND-PROTECT.
+
+On the plus side, we have CALL/CC, a trampoline-style evaluator (so
+infinite recursion won't blow the stack) and a nice browser-based demo
+(open browser/index.html, put it behind a real Web server so that
+samples would work; avoid IE or Opera for this test; avoid IE in
+general.)
+
+If you have an error in your program, you might have the surprise to
+not see any error report whatsoever, and instead the editor will
+refuse to listen to your key bindings and the only possible "fix" will
+be to refresh the page.  I could improve this, but it doesn't worth
+the trouble.
+
+This is how it ends.  Progress is unlikely, I need to start all over.
+
+----------------------------------------------------------------------
+
 This is a toy Lisp interpreter in JavaScript.  It follows the wisdom
 brought to us by prophets in SICP 4:1:7 to implement an analyze
 function that breaks the Lisp program into JavaScript closures.  It's
